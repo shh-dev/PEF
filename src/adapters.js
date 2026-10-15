@@ -43,6 +43,9 @@ const finding = (o) => ({
   title: mask(o.title),
   severity: o.severity,
   verification: o.verification ?? 'Confirmed',
+  // 도구는 판단하지 않는다. 사람/에이전트가 처분을 정하기 전까지 NeedsCheck → 감사 미완결로 남는다.
+  disposition: 'NeedsCheck',
+  dispositionReason: '도구 결과 — 아직 사람/에이전트가 판단하지 않음',
   confidence: 'medium',
   evidence: mask(o.evidence ?? ''),
   filePath: o.filePath,
@@ -110,6 +113,8 @@ export function parseOsv(json) {
           finding({
             category: '4.13 보안',
             ruleId: 'SE-11',
+            // 취약 버전이 *설치돼 있다*는 사실만 안다. 그 기능을 실제로 쓰는지는 모르므로 Suspected (사용 확인 시 Confirmed로 올림)
+            verification: 'Suspected',
             title: `${pkg.package?.name}@${pkg.package?.version}: ${v.id}`,
             severity: score >= 9 ? 'P0' : score >= 7 ? 'P1' : score >= 4 ? 'P2' : 'P3',
             evidence: `osv ${v.id} ${(v.summary ?? '').slice(0, 120)}`,

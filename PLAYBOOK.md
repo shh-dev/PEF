@@ -30,6 +30,7 @@ pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regr
 - 설치: 이 저장소에서 `npm link` (의존성 없음). 외부 도구 4종은 `npm i -g knip dependency-cruiser`, `pip install semgrep`, `winget install Google.OSVScanner`. **도구 설치는 사용자 승인 후.** 없으면 해당 항목은 NotTested로 남고 총점은 신뢰도 낮음으로 표시된다.
 - 도구가 낸 Finding은 정적 분석이라 대부분 `Suspected`다(OSV 취약점·순환참조만 Confirmed). 에이전트가 코드를 읽어 확정/오탐을 판단한 뒤 `verification`을 고쳐서 합친다.
 - `pef audit`는 `--out`을 주지 않으면 대상 안 `.pef/`에 쓴다. 운영 중인 대상이면 `--out`으로 대상 밖 폴더를 지정한다.
+- **처분 정하기:** 도구·수동 Finding은 모두 `disposition`을 정한다(ActNow/Plan/NoActionNow). "당장 신경 안 써도 됨"은 *확인한 근거*(검색 명령+결과, 버전·커밋)와 다시 볼 조건이 있을 때만 쓴다 — 추정 금지. 규칙은 `docs/SCORING.md` §7.
 - 총점이 `null`이거나 "검사 부족"이면 안전하다는 뜻이 아니다. 에이전트의 수동 점검을 더해 커버리지를 올린 뒤 해석한다.
 
 ## 1. 절대 규칙 (SPEC §1·§19 요약)

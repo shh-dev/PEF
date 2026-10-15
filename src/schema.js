@@ -34,4 +34,15 @@ function validate(value, schema, path = '$') {
   return errors;
 }
 
-export const validateResult = (r) => validate(r, loadSchema('result.schema.json'));
+// 스키마로 못 표현하는 규칙: "신경 안 써도 됨"은 확인한 근거가 있을 때만 허용 (추정으로 무시 금지)
+export function validateResult(r) {
+  const errors = validate(r, loadSchema('result.schema.json'));
+  (r?.findings ?? []).forEach((f, i) => {
+    if (f?.disposition === 'NoActionNow') {
+      for (const k of ['dispositionReason', 'dispositionEvidence', 'recheckWhen']) {
+        if (!f[k]?.trim()) errors.push(`$.findings[${i}].${k}: NoActionNow 는 필수 (확인한 근거 없이 무시 불가)`);
+      }
+    }
+  });
+  return errors;
+}

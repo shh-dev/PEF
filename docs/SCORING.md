@@ -81,3 +81,26 @@ SPEC은 7개 가중치만 정의한다. 에이전트마다 점수가 달라지�
 ## 6. 전후 비교
 
 개선 전후는 **같은 체크리스트 범위·같은 가중치**로 비교한다. 범위가 달라지면 비교 불가(`Inconclusive`)로 표기한다. 점수 상승만으로 개선을 주장하지 않고, 성능은 측정값, 회귀는 테스트 결과로 함께 제시한다.
+
+## 7. 처분(disposition)과 완결성 — "다 봤다"를 보장하는 조건
+
+점수는 *얼마나 나쁜가*를, 완결성은 *빠진 게 없다고 말할 수 있는가*를 답한다. 둘은 별개다. 점수가 100이어도 미완결이면 "문제 없음"이라고 말하지 않는다.
+
+**처분 값 (Finding마다, `disposition`)**
+| 값 | 뜻 |
+|---|---|
+| ActNow | 지금 고쳐야 함 |
+| Plan | 개선 계획에 넣음 |
+| NoActionNow | **당장 신경 안 써도 됨.** 영향이 없음을 *확인한* 근거가 있을 때만 |
+| NeedsCheck | 아직 판단 전 (도구가 낸 Finding의 기본값) |
+
+**NoActionNow 규칙 (추정으로 무시 금지)**
+- `dispositionReason`(이유) · `dispositionEvidence`(확인한 근거: 실행한 검색 명령과 결과, 확인한 커밋·버전) · `recheckWhen`(다시 볼 조건) 셋 다 필수. 하나라도 없으면 `pef validate`가 실패한다.
+- "아마 안 쓸 것이다", "위험이 낮아 보인다"는 근거가 아니다. 확인하지 못했으면 NeedsCheck로 둔다.
+- NoActionNow는 감점·출시 차단에서 빠지고, 보고서 "당장 신경 쓰지 않아도 되는 것"에 근거와 함께 나열된다.
+
+**완결 조건 (둘 다 만족해야 `완결`)**
+1. 적용 대상 체크리스트 항목에 판정이 모두 있다 (NotTested·RequiresManualReview·누락 = 0). 해당 없는 항목은 NotApplicable + 사유.
+2. Confirmed/Suspected/RequiresManualReview Finding이 모두 NeedsCheck가 아닌 처분을 가진다 (사용자 승인된 AcceptedRisk 제외).
+
+미완결이면 판정은 `차단 근거 없음 (미완결 — 안전하다는 보장 아님)`이며, 보고서에 비어 있는 항목·Finding 목록이 그대로 나온다.

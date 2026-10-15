@@ -5,7 +5,7 @@ const sevOrder = ['P0', 'P1', 'P2', 'P3', 'P4'];
 
 export function renderReport(merged, s, now = new Date()) {
   const m = merged.meta;
-  const top = merged.findings.filter((f) => f.severity === 'P0' || f.severity === 'P1').sort((a, b) => sevOrder.indexOf(a.severity) - sevOrder.indexOf(b.severity));
+  const top = merged.findings.filter((f) => f.disposition !== 'NoActionNow').filter((f) => f.severity === 'P0' || f.severity === 'P1').sort((a, b) => sevOrder.indexOf(a.severity) - sevOrder.indexOf(b.severity));
   const row = (g) => `| ${g.name} | ${g.weight} | ${g.insufficient ? '측정 불충분' : g.score} | ${g.coverage}% (${g.tested}/${g.applicable}) |`;
   const out = [
     `# PEF 보고서 — ${m.target}`,
@@ -26,6 +26,25 @@ export function renderReport(merged, s, now = new Date()) {
     '',
     `영역별 최저: ${s.lowest.map((d) => `${d.area} ${d.name} ${d.score}`).join(' · ') || '없음'}`,
     ...(s.weakAreas.length ? ['', `⚠ 취약 영역(50 미만): ${s.weakAreas.map((d) => `${d.area} ${d.name} ${d.score}`).join(', ')}`] : []),
+    '',
+    '## 2-1. 완결성',
+    s.completeness.complete
+      ? '✅ 완결 — 모든 적용 항목에 판정이 있고, 모든 Finding에 처분이 정해졌습니다.'
+      : [
+          '❌ **미완결** — 아래가 비어 있어 "문제 없음"을 보장할 수 없습니다.',
+          `- 판정이 없는 항목 ${s.completeness.unjudged.length}개${s.completeness.unjudged.length ? `: ${s.completeness.unjudged.slice(0, 40).join(', ')}${s.completeness.unjudged.length > 40 ? ' …' : ''}` : ''}`,
+          `- 처분이 없는 Finding ${s.completeness.untriaged.length}건${s.completeness.untriaged.length ? `: ${s.completeness.untriaged.slice(0, 20).join(', ')}${s.completeness.untriaged.length > 20 ? ' …' : ''}` : ''}`,
+        ].join('\n'),
+    '',
+    '## 2-2. 당장 신경 쓰지 않아도 되는 것 (확인한 근거 있음)',
+    ...(s.ignoredFindings.length
+      ? s.ignoredFindings.flatMap((f) => [
+          `- **${f.id}** ${mask(f.title)}`,
+          `  - 이유: ${mask(f.dispositionReason)}`,
+          `  - 확인한 근거: ${mask(f.dispositionEvidence)}`,
+          `  - 다시 볼 조건: ${mask(f.recheckWhen)}`,
+        ])
+      : ['없음']),
     '',
     '## 3. 주요 Finding (P0~P1)',
     ...(top.length

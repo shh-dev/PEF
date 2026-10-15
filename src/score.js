@@ -20,10 +20,27 @@ const confidence = (c) => (c >= 0.8 ? '높음' : c >= 0.5 ? '중간' : '낮음')
 const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
+/**
+ * 완결성: "다 봤고, 나온 문제마다 처분이 정해졌다"를 보장할 수 있을 때만 complete.
+ * 하나라도 비면 어느 항목/Finding이 비었는지 그대로 돌려준다 (총점이 높아도 완결이 아니다).
+ */
+function completeness(merged, lists) {
+  const unjudged = [...lists.values()]
+    .flatMap((a) => a.ids)
+    .filter((id) => ['NotTested', 'RequiresManualReview', undefined].includes(merged.coverage[id]));
+  const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(f.fixStatus === 'AcceptedRisk' && f.acceptedBy);
+  const untriaged = merged.findings.filter((f) => open(f) && (!f.disposition || f.disposition === 'NeedsCheck')).map((f) => f.id);
+  return { complete: !unjudged.length && !untriaged.length, unjudged, untriaged };
+}
+
 /** @param {{findings: object[], coverage: Record<string,string>}} merged */
 export function score(merged) {
   const lists = loadChecklists();
   const areaOf = (f) => f.category.match(/^4\.\d+/)?.[0];
+
+  // 근거와 함께 "당장 신경 안 써도 됨"으로 처분된 Finding은 감점·차단에서 뺀다 (보고서에는 따로 나열). 근거 검증은 validateResult 몫.
+  const original = merged;
+  merged = { ...merged, findings: merged.findings.filter((f) => f.disposition !== 'NoActionNow') };
 
   // 세부 영역(4.x)
   const detail = new Map();
@@ -57,6 +74,7 @@ export function score(merged) {
 
   const confirmedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Confirmed' && f.fixStatus !== 'AcceptedRisk');
   const suspectedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Suspected' && f.fixStatus !== 'AcceptedRisk');
+  const complete = completeness(original, lists);
   const bySeverity = Object.fromEntries(['P0', 'P1', 'P2', 'P3', 'P4'].map((s) => [s, merged.findings.filter((f) => f.severity === s).length]));
 
   return {
@@ -64,11 +82,19 @@ export function score(merged) {
     coverage: pct(tested, applicable),
     confidence: confidence(coverage),
     // 검사를 거의 못 했는데 "차단 없음"만 보이면 안전하다는 착각을 준다 → 신뢰도 낮음이면 명시
-    verdict: confirmedP0.length ? '출시 차단' : suspectedP0.length ? '출시 보류 – 수동 확인 필요' : coverage < 0.5 ? '차단 근거 없음 (검사 부족 — 안전하다는 뜻 아님)' : '차단 없음',
+    verdict: confirmedP0.length
+      ? '출시 차단'
+      : suspectedP0.length
+        ? '출시 보류 – 수동 확인 필요'
+        : !complete.complete
+          ? '차단 근거 없음 (미완결 — 안전하다는 보장 아님)'
+          : '차단 없음',
     groups: groups.map((g) => ({ ...g, coverage: pct(g.tested, g.applicable) })),
     weakAreas: [...detail.values()].filter((d) => d.tested > 0 && d.score < 50),
     lowest: [...detail.values()].filter((d) => d.tested > 0).sort((a, b) => a.score - b.score).slice(0, 4),
     counts: { findings: merged.findings.length, ...bySeverity, tested, applicable },
+    completeness: complete,
+    ignoredFindings: original.findings.filter((f) => f.disposition === 'NoActionNow'),
     manualReview: merged.findings.filter((f) => f.needsLiveCheck || f.verification === 'RequiresManualReview').map((f) => f.id),
   };
 }

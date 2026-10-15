@@ -95,3 +95,36 @@ test('audit 결과: 도구 미설치 항목은 NotTested (통과 처리 금지) 
   assert.deepEqual(validateResult(r), []);
   assert.equal(score(mergeResults([{ name: 'a', result: r }]).merged).total, null);
 });
+
+test('처분: NoActionNow 는 근거(이유·확인한 근거·다시 볼 조건) 없으면 검증 실패', () => {
+  const bare = finding({ disposition: 'NoActionNow' });
+  assert.ok(validateResult(result({ findings: [bare] })).length >= 3);
+  const ok = finding({ disposition: 'NoActionNow', dispositionReason: 'r', dispositionEvidence: 'git grep next/og → 0건', recheckWhen: 'next/og 사용 시' });
+  assert.deepEqual(validateResult(result({ findings: [ok] })), []);
+});
+
+test('완결성: 미판정 항목·처분 없는 Finding이 있으면 미완결, 총점이 높아도 "차단 없음" 아님', () => {
+  const s = score({ findings: [finding({ severity: 'P3', verification: 'Suspected' })], coverage: all('Clean') });
+  assert.equal(s.completeness.complete, false);
+  assert.deepEqual(s.completeness.untriaged, ['F-1']);
+  assert.ok(s.verdict.includes('미완결'));
+  const done = score({ findings: [finding({ severity: 'P3', verification: 'Suspected', disposition: 'Plan' })], coverage: all('Clean') });
+  assert.equal(done.completeness.complete, true);
+  assert.equal(done.verdict, '차단 없음');
+  assert.equal(score({ findings: [], coverage: {} }).completeness.complete, false);
+});
+
+test('처분: 근거 있는 NoActionNow 는 감점·차단에서 빠지고 따로 나열된다', () => {
+  const f = finding({ severity: 'P0', disposition: 'NoActionNow', dispositionReason: 'r', dispositionEvidence: 'e', recheckWhen: 'w' });
+  const s = score({ findings: [f], coverage: all('Clean') });
+  assert.equal(s.verdict, '차단 없음');
+  assert.equal(s.total, 100);
+  assert.equal(s.ignoredFindings.length, 1);
+  assert.equal(s.completeness.complete, true);
+});
+
+test('OSV: 취약 버전 설치는 사실이지만 사용 여부를 모르므로 Suspected + NeedsCheck', () => {
+  const osv = parseOsv(JSON.stringify({ results: [{ source: { path: 'l' }, packages: [{ package: { name: 'x', version: '1' }, groups: [{ ids: ['G'], max_severity: '9.8' }], vulnerabilities: [{ id: 'G', summary: 's' }] }] }] }));
+  assert.equal(osv[0].verification, 'Suspected');
+  assert.equal(osv[0].disposition, 'NeedsCheck');
+});
