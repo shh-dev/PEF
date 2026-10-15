@@ -258,3 +258,36 @@ test('유형 전용 항목: DK-* 는 데스크톱에서만, MB-* 는 모바일�
   assert.ok(s.completeness.unjudged.some((id) => id.startsWith('DK-')));
   assert.ok(!s.completeness.unjudged.some((id) => id.startsWith('MB-')));
 });
+
+test('영수증: .env 값은 절대 읽지 않고 이름만, 시크릿·토큰은 출력에 없다', async () => {
+  const { buildReceipt, renderReceiptMd, renderReceiptHtml } = await import('../src/receipt.js');
+  const dir = await tmpProject({
+    'package.json': { name: 'demo', dependencies: { '@supabase/supabase-js': '1', stripe: '1' } },
+    '.env.local': 'SUPABASE_SERVICE_ROLE_KEY=sb_secret_REALVALUE_should_never_appear_123456\n',
+    '.env.example': 'SUPABASE_SERVICE_ROLE_KEY=\nSTRIPE_SECRET_KEY=\n',
+    'src/a.ts': 'const u = process.env.NEXT_PUBLIC_SUPABASE_URL; const k = process.env.STRIPE_SECRET_KEY; const x = process.env.ONLY_IN_CODE_TOKEN;',
+    'wrangler.jsonc': '{ // 주석\n "name": "demo-worker", "account_id": "0123456789abcdef0123456789abcdef", "routes": [{"pattern":"demo.example.com/*"}], "triggers": {"crons":["0 * * * *"]}, "vars": {"APP_ENV":"production-value-hidden"} }',
+    '.mcp.json': { mcpServers: { files: { command: 'npx', args: ['-y', '@x/mcp', '--token=SECRETTOKEN12345'], env: { MY_API_KEY: 'LEAKME_VALUE_999999' } }, remote: { url: 'https://mcp.example.com/sse?key=LEAKQUERY', headers: { Authorization: 'Bearer LEAKBEARER_abcdefghijk' } } } },
+  });
+  const r = buildReceipt(dir);
+  const md = renderReceiptMd(r);
+  const html = renderReceiptHtml(r);
+  for (const leak of ['REALVALUE_should_never', 'SECRETTOKEN12345', 'LEAKME_VALUE', 'LEAKQUERY', 'LEAKBEARER', 'production-value-hidden']) {
+    assert.ok(!md.includes(leak) && !html.includes(leak), `${leak} 가 영수증에 노출됨`);
+  }
+  assert.ok(md.includes('SUPABASE_SERVICE_ROLE_KEY') && md.includes('ONLY_IN_CODE_TOKEN')); // 이름은 나온다
+  assert.ok(md.includes('MY_API_KEY') && md.includes('mcp.example.com')); // MCP 는 env 이름·호스트만
+  assert.ok(md.includes('0123…cdef')); // 계정 ID 는 가림
+  assert.ok(md.includes('demo.example.com/*') && md.includes('0 * * * *'));
+  assert.ok(r.env.realFiles.includes('.env.local')); // 존재만 알림
+  assert.ok(md.includes('.env.example 에 없는 환경변수') && md.includes('ONLY_IN_CODE_TOKEN'));
+});
+
+test('영수증: 실시간 확인 출력 파서 (wrangler whoami, supabase projects list)', async () => {
+  const { parseWhoami, parseSupabaseProjects } = await import('../src/receipt.js');
+  const w = parseWhoami('👋 You are logged in with an OAuth Token, associated with the email someone@example.com.\n┌──┬──┐\n│ Account Name │ Account ID │\n│ My Account │ 0123456789abcdef0123456789abcdef │\n└──┴──┘');
+  assert.equal(w.accounts[0].name, 'My Account');
+  assert.ok(w.email.startsWith('som') && !w.email.includes('someone@'));
+  const s = parseSupabaseProjects('  LINKED | ORG ID | REFERENCE ID | NAME | REGION | CREATED AT\n  ● | org123 | abcdefghijklmnopqrst | My Proj | Northeast Asia (Seoul) | 2026-06-28 00:00:00');
+  assert.deepEqual(s.map((p) => [p.ref, p.name]), [['abcdefghijklmnopqrst', 'My Proj']]);
+});

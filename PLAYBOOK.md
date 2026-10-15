@@ -32,6 +32,8 @@
 pef discover <대상>                      # 스택·git 상태 (읽기 전용)
 pef audit <대상> --out <대상 밖 폴더>     # 설치된 Knip·Semgrep·OSV-Scanner·Dependency Cruiser 실행 → *_result.json
 # (에이전트가 체크리스트 나머지를 수동 점검해 result.schema.json 형식의 파일을 추가로 만든다)
+pef receipt <대상> --out <폴더>           # 앱 영수증: 연결된 Cloudflare·Supabase·MCP·외부 서비스·환경변수 이름·예약작업을 한 장(receipt.html)으로. 값은 읽지 않음, 날짜는 git 기록 기준
+pef receipt <대상> --live                # (사용자 승인 후) 로그인된 wrangler/supabase CLI에 "어느 계정인지"를 읽기 전용으로 물어 계정 이름·프로젝트를 확인
 pef validate <result.json...>            # 형식 검사
 pef report <result.json...> --out <폴더> # 합치기 → 점수 → report.md (--json 이면 score.json)
 pef triage <result.json> --rule C-02 --disposition Plan --reason "..."   # 규칙 단위 일괄 처분 (NoActionNow 는 --evidence/--recheck 필수)
@@ -91,7 +93,7 @@ pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regr
 
 | # | 단계 | 내용 | 산출물 |
 |---|---|---|---|
-| 1 | Discover | 언어·프레임워크·패키지매니저·모노레포·빌드·테스트·DB·배포·MCP·환경변수 참조·외부서비스 탐색. 지원 수준(Full/Partial/Detection Only/Unsupported) 표기 | `.pef/profile.md` |
+| 1 | Discover | 언어·프레임워크·패키지매니저·모노레포·빌드·테스트·DB·배포·MCP·환경변수 참조·외부서비스 탐색. 지원 수준(Full/Partial/Detection Only/Unsupported) 표기. **`pef receipt`로 "앱 영수증"(연결된 서비스·계정·MCP 한 장)을 만들어 사용자에게 보여 주고, 연결을 바꿀 때마다 갱신한다** | `.pef/profile.md`, `.pef/receipt.html` |
 | 2 | Baseline | 현재 git commit, 테스트/빌드/타입체크 결과(*실행 승인된 것만*), 번들 크기 등 수치 기록 | `.pef/baseline-<YYMMDD-HHMMSS>.json` |
 | 3 | Audit | `checklists/01~20` 파일을 스택·프로파일에 맞게 선별 점검(항목 ID를 Finding `ruleId`로 사용). 모든 결과를 `templates/finding.schema.json` 형식으로 기록(증거: 파일:줄, 규칙, 재현법) | `.pef/findings.json` |
 | 4 | Score | `docs/SCORING.md` 방식으로 점수 산출(SPEC §6 가중치). P0/데이터유실 있으면 "출시 차단". 커버리지·신뢰도 별도 표기 | `.pef/report.md` (`templates/report.md` 기반) |

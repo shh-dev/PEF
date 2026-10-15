@@ -5,6 +5,7 @@ import { score } from './score.js';
 import { renderReport } from './report.js';
 import { renderHtml } from './html.js';
 import { discover } from './discover.js';
+import { buildReceipt, renderReceiptMd, renderReceiptHtml } from './receipt.js';
 import { classify, TYPE_LABEL } from './classify.js';
 import { buildProfile, profileKey, PROFILES } from './profile.js';
 import { runAdapters, ADAPTERS } from './adapters.js';
@@ -17,6 +18,7 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
 사용법:
   pef discover [폴더]                        스택·git 상태 탐색 (JSON)
   pef audit [폴더] [--out 폴더]              설치된 검사 도구를 돌려 result 파일 생성 (기본 출력: <폴더>/.pef)
+  pef receipt [폴더] [--out 폴더]            앱 영수증: 연결된 Cloudflare·Supabase·MCP·외부 서비스·환경변수 이름을 한 장으로 (값은 읽지 않음). --live 를 더하면 로그인된 wrangler/supabase CLI에 계정을 물어봄(읽기 전용, 승인 후)
   pef profile <유형> --out <.pef>             사용자가 확인한 앱 유형 저장 (방향·가중치·해당 없음 영역 결정). discover 가 유형을 추정해 줌
   pef validate <result.json...>              결과 파일이 스키마에 맞는지 검사
   pef report <result.json...> [--out 폴더] [--json]
@@ -96,6 +98,7 @@ export function run(argv) {
     if (rest[i] === '--out') flags.out = rest[++i];
     else if (rest[i] === '--json') flags.json = true;
     else if (rest[i] === '--html') flags.html = true;
+    else if (rest[i] === '--live') flags.live = true;
     else if (rest[i] === '--note') flags.note = rest[++i];
     else if (rest[i] === '--profile') flags.profile = rest[++i];
     else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
@@ -119,6 +122,19 @@ export function run(argv) {
       const c = classify(dir);
       const main = c.types[0];
       console.log(JSON.stringify({ ...discover(dir), classification: { ...c, 추정: TYPE_LABEL[profileKey(main.type)] }, proposedProfile: buildProfile(main.type), 다음: '사용자에게 유형을 확인받고 pef profile <유형> --out <.pef> 로 확정' }, null, 2));
+      return 0;
+    }
+
+    if (cmd === 'receipt') {
+      // 앱 영수증: 연결된 서비스·계정·MCP·환경변수 이름을 한 장으로. 시크릿 값은 읽지 않고 .env 파일은 열지 않는다.
+      const dir = resolve(args[0] ?? '.');
+      if (!existsSync(dir)) return fail(`폴더가 없습니다: ${dir}`);
+      const r = buildReceipt(dir, new Date(), { liveCheck: !!flags.live });
+      const out = resolve(flags.out ?? `${dir}/.pef`);
+      mkdirSync(out, { recursive: true });
+      writeFileSync(`${out}/receipt.md`, renderReceiptMd(r));
+      writeFileSync(`${out}/receipt.html`, renderReceiptHtml(r));
+      console.log(`저장: ${out}/receipt.html (+ receipt.md)`);
       return 0;
     }
 
