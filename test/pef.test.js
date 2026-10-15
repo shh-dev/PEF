@@ -7,7 +7,12 @@ import { score } from '../src/score.js';
 import { loadChecklists } from '../src/checklist.js';
 import { kstStamp } from '../src/time.js';
 import { parseKnip, parseSemgrep, parseOsv, parseDepcruise } from '../src/adapters.js';
-import { buildAuditResult } from '../src/cli.js';
+import { buildAuditResult, buildIntegrationsResult } from '../src/cli.js';
+import { mkdtempSync, writeFileSync as wf, mkdirSync as md } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as pj } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { scanEnvRefs, scanCiRefs, isClientExposedSecret, describeMcpServer, parseCodexMcp, inspectIntegrations } from '../src/integrations.js';
 
 const finding = (o = {}) => ({ id: 'F-1', category: '4.13 보안', ruleId: 'SE-01', title: 't', severity: 'P1', verification: 'Confirmed', evidence: 'e', fixStatus: 'Open', filePath: 'a.js', line: 1, ...o });
 const result = (o = {}) => ({ meta: { target: 'x', commit: 'abc', profile: 'p', auditedAt: '2026-10-15T18:00:00+09:00', scope: ['13-security.md'] }, findings: [], coverage: {}, ...o });
@@ -155,4 +160,90 @@ test('triage: 규칙 단위 일괄 처분, 이미 정한 처분은 덮어쓰지 
     assert.equal(run(['triage', p, '--rule', 'SE-01', '--disposition', 'NoActionNow', '--reason', 'x']), 2);
     assert.equal(JSON.parse(readFileSync(p, 'utf8')).findings[2].disposition, undefined);
   } finally { console.log = quiet; console.error = qe; }
+});
+
+// ── integrations (SPEC §10) ─────────────────────────────────────────────────
+
+test('integrations: 코드에서 환경변수 이름·줄 번호 추출 (여러 언어·구조분해)', () => {
+  const names = (t) => scanEnvRefs(t).map((r) => r.name);
+  assert.deepEqual(names('const a = process.env.API_URL;\nconst b = process.env["DB_URL"];'), ['API_URL', 'DB_URL']);
+  assert.deepEqual(names('import.meta.env.VITE_X'), ['VITE_X']);
+  assert.deepEqual(names("os.getenv('PY_KEY')\nos.environ['PY_B']"), ['PY_KEY', 'PY_B']);
+  assert.deepEqual(names('const { A_ONE, B_TWO: b, C = 1 } = process.env'), ['A_ONE', 'B_TWO', 'C']);
+  assert.equal(scanEnvRefs('\n\nprocess.env.X')[0].line, 3);
+  assert.deepEqual(names('process.env.lowercase'), []);
+});
+
+test('integrations: CI 시크릿 이름 (GITHUB_TOKEN 은 자동이라 제외)', () => {
+  const r = scanCiRefs('token: ${{ secrets.CF_TOKEN }}\nid: ${{ vars.ACCOUNT }}\ngh: ${{ secrets.GITHUB_TOKEN }}');
+  assert.deepEqual(r.map((x) => `${x.kind}.${x.name}`), ['secrets.CF_TOKEN', 'vars.ACCOUNT']);
+});
+
+test('integrations: 브라우저로 나가는 비밀 이름 판정', () => {
+  assert.equal(isClientExposedSecret('NEXT_PUBLIC_STRIPE_SECRET_KEY'), true);
+  assert.equal(isClientExposedSecret('VITE_SUPABASE_SERVICE_ROLE_KEY'), true);
+  assert.equal(isClientExposedSecret('NEXT_PUBLIC_SUPABASE_ANON_KEY'), false);
+  assert.equal(isClientExposedSecret('NEXT_PUBLIC_SITE_URL'), false);
+  assert.equal(isClientExposedSecret('STRIPE_SECRET_KEY'), false);
+});
+
+test('integrations: MCP 설정은 메타데이터만, 박힌 값은 위험으로만 표시하고 값은 남기지 않음', () => {
+  const secret = 'ghp_' + 'z'.repeat(30);
+  const m = describeMcpServer('github', { command: '/usr/bin/npx', args: ['-y', 'server', secret], env: { GITHUB_TOKEN: secret, MODE: 'x' } }, '.mcp.json', 'Claude Code');
+  assert.equal(m.transport, 'stdio');
+  assert.equal(m.command, 'npx');
+  assert.deepEqual(m.envNames, ['GITHUB_TOKEN', 'MODE']);
+  assert.equal(m.risks.length, 2);
+  assert.ok(!JSON.stringify(m).includes('zzzz'));
+  const h = describeMcpServer('remote', { url: 'https://mcp.example.com/sse?token=abc', headers: { Authorization: 'Bearer ${API_TOKEN}' } }, '.vscode/mcp.json', 'VS Code');
+  assert.equal(h.transport, 'http');
+  assert.equal(h.endpoint, 'mcp.example.com');
+  assert.deepEqual(h.risks, ['URL 에 토큰이 붙어 있음']);
+  assert.deepEqual(describeMcpServer('ok', { command: 'node', args: ['s.js'], env: { API_KEY: '${API_KEY}' } }, 'f', 'c').risks, []);
+});
+
+test('integrations: Codex config.toml 의 MCP 블록 파싱', () => {
+  const s = parseCodexMcp('[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n\n[mcp_servers.docs.env]\nAPI_KEY = "literal-value-123"\n\n[other]\nx = 1');
+  assert.deepEqual(Object.keys(s), ['docs']);
+  assert.deepEqual(s.docs.args, ['-y', 'docs-mcp']);
+  assert.equal(describeMcpServer('docs', s.docs, 'f', 'Codex').risks.length, 1);
+});
+
+test('integrations: 실제 폴더 탐색 — 추적된 .env, 공개 비밀, 서비스 근거, 값 미노출', () => {
+  const dir = mkdtempSync(pj(tmpdir(), 'pef-int-'));
+  const git = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: 'ignore' });
+  git('init', '-q');
+  wf(pj(dir, 'package.json'), JSON.stringify({ dependencies: { '@supabase/supabase-js': '2', pg: '8' } }));
+  md(pj(dir, 'src'));
+  wf(pj(dir, 'src/a.ts'), 'export const k = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;\nconst u = process.env.SUPABASE_URL;');
+  md(pj(dir, 'node_modules/x'), { recursive: true });
+  wf(pj(dir, 'node_modules/x/i.js'), 'process.env.SHOULD_NOT_APPEAR');
+  wf(pj(dir, '.env'), 'SUPER_SECRET_VALUE_DO_NOT_LEAK');
+  wf(pj(dir, '.env.example'), 'X=');
+  wf(pj(dir, '.mcp.json'), JSON.stringify({ mcpServers: { supabase: { command: 'npx', env: { SUPABASE_ACCESS_TOKEN: 'sbp_literal_value_1234567890' } } } }));
+  git('add', '.env', 'package.json');
+  const inv = inspectIntegrations(dir);
+  assert.deepEqual(inv.envVars.map((v) => v.name), ['NEXT_PUBLIC_STRIPE_SECRET_KEY', 'SUPABASE_URL']);
+  assert.equal(inv.envVars[0].refs[0].file, 'src/a.ts');
+  const supa = inv.services.find((s) => s.service === 'Supabase');
+  assert.equal(supa.status, 'Configured');
+  assert.equal(supa.connection, 'NotTested');
+  assert.equal(inv.services.find((s) => s.service === 'PostgreSQL').status, 'Candidate');
+  assert.deepEqual(inv.envFiles.map((e) => [e.name, e.tracked, e.template]), [['.env', true, false], ['.env.example', false, true]]);
+  const titles = inv.findings.map((f) => `${f.severity} ${f.title}`);
+  assert.ok(titles.some((t) => t.startsWith('P0 .env 파일이 git')));
+  assert.ok(titles.some((t) => t.startsWith('P1 공개 접두사')));
+  assert.ok(titles.some((t) => t.startsWith('P1 MCP')));
+  const text = JSON.stringify(inv);
+  assert.ok(!text.includes('SUPER_SECRET_VALUE') && !text.includes('sbp_literal'));
+  const r = buildIntegrationsResult(dir, { stack: ['node'], supportLevel: 'Detection Only', git: null }, inv);
+  assert.deepEqual(validateResult(r), []);
+  assert.equal(r.coverage['SE-10'], 'Suspected');
+  assert.equal(score(mergeResults([{ name: 'i', result: r }]).merged).verdict, '출시 보류 – 수동 확인 필요');
+});
+
+test('integrations: 문제 없으면 SE-10 을 Clean 으로 만들지 않음 (이름만 봤으므로)', () => {
+  const r = buildIntegrationsResult('x', { stack: [], supportLevel: 'Unsupported', git: null }, { findings: [] });
+  assert.deepEqual(r.coverage, {});
+  assert.ok(r.coverageNotes['SE-10'].includes('Clean 아님'));
 });

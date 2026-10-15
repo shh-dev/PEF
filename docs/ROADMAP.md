@@ -5,7 +5,7 @@
 ## P0 — 준비 ✅
 - 명세 정본, 플레이북, 점검표, Finding 스키마, 보고서 템플릿
 
-## V1 — Universal Audit MVP 👉 (1차: 의존성 0개 JS CLI. 2~6·8~11 완료(어댑터 4종 실제 실행 검증), 7·번들·HTML·프로파일 가중치 미구현)
+## V1 — Universal Audit MVP 👉 (1차: 의존성 0개 JS CLI. 2~7·9~11 완료(어댑터 4종 실제 실행 검증, HTML 보고서, integrations), 번들 크기·프로파일 가중치(8) 미구현)
 권장 스택(제안, 착수 전 확정): TypeScript + Node 20+, 의존성 최소(CLI 파서·스키마 검증 정도), 테스트는 `node:test` 또는 vitest.
 
 작업 분해(의존 순서):
@@ -15,7 +15,7 @@
 4. Project Discovery (언어·프레임워크·패키지매니저·모노레포·지원수준)
 5. Adapter 인터페이스 + Audit Orchestrator (격리 실행, 타임아웃, 도구 미설치 = Not Tested)
 6. 기본 검사기: 코드 품질(Knip), 보안 정적(Semgrep), 의존성(OSV-Scanner), 순환참조(Dependency Cruiser), 번들 크기
-7. Integration & Secrets Inspector: MCP 설정 탐색, env 이름·참조 위치, 외부 서비스 후보 (값 읽기 없음)
+7. ✅ Integration & Secrets Inspector: MCP 설정 탐색, env 이름·참조 위치, 외부 서비스 후보 (값 읽기 없음) — `pef integrations`
 8. Scoring (앱 프로파일별 가중치, PLAYBOOK §1.5)
 9. Baseline 저장/비교
 10. 리포트 JSON/HTML/Markdown

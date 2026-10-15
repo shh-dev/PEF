@@ -18,3 +18,8 @@
 
 ## 0.3.0
 - `pef triage`(규칙 단위 일괄 처분), `report --html`(사람이 보기 쉬운 단일 HTML 보고서)
+
+## 0.4.0
+- `pef integrations`(SPEC §10.1~10.3, ROADMAP V1-7): 코드 속 환경변수 이름·참조 위치, CI 시크릿 이름, `.env*` 파일의 git 추적·ignore 여부(내용은 열지 않음), 프로젝트 MCP 설정(Claude Code·Cursor·VS Code·Gemini·Codex), 외부 서비스 후보(의존성만 = Candidate, 설정·환경변수 근거 = Configured, 연결은 전부 NotTested)
+- 위험은 SE-10 Suspected Finding으로 기록: 공개 접두사(`NEXT_PUBLIC_` 등)에 비밀 이름, git에 올라간 `.env`(P0), ignore 안 된 `.env`, MCP 설정에 박힌 키. `--out`이면 report에 합칠 수 있는 result 파일도 저장
+- 이름만 보고 판단하므로 문제가 없어도 SE-10을 Clean으로 만들지 않음

@@ -21,6 +21,7 @@
 pef discover <대상>                      # 스택·git 상태 (읽기 전용)
 pef audit <대상> --out <대상 밖 폴더>     # 설치된 Knip·Semgrep·OSV-Scanner·Dependency Cruiser 실행 → *_result.json
 # (에이전트가 체크리스트 나머지를 수동 점검해 result.schema.json 형식의 파일을 추가로 만든다)
+pef integrations <대상> --out <대상 밖 폴더>  # 환경변수·CI 시크릿 이름, .env git 상태, MCP 설정, 외부 서비스 후보 (값은 안 읽음) → *_integrations_result.json
 pef validate <result.json...>            # 형식 검사
 pef report <result.json...> --out <폴더> # 합치기 → 점수 → report.md (--json 이면 score.json)
 pef triage <result.json> --rule C-02 --disposition Plan --reason "..."   # 규칙 단위 일괄 처분 (NoActionNow 는 --evidence/--recheck 필수)
