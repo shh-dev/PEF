@@ -45,7 +45,15 @@ export function buildAuditResult(dir, discovery, run, now = new Date()) {
         const why = run.notTested.find((n) => n.tool === a.id)?.reason ?? '미실행';
         coverage[id] = why.includes('해당 없음') ? 'NotApplicable' : 'NotTested';
         coverageNotes[id] = `${a.id}: ${why}`;
-      } else coverage[id] = hits.some((f) => f.verification === 'Confirmed') ? 'Confirmed' : hits.length ? 'Suspected' : 'Clean';
+      } else {
+        coverage[id] = hits.some((f) => f.verification === 'Confirmed') ? 'Confirmed' : hits.length ? 'Suspected' : 'Clean';
+        // 앱 여러 개 중 일부에서만 돌았으면 "깨끗함"이라 말할 수 없다.
+        const failed = run.notTested.filter((n) => n.tool === a.id);
+        if (failed.length) {
+          if (coverage[id] === 'Clean') coverage[id] = 'NotTested';
+          coverageNotes[id] = `${a.id}: 일부만 검사됨 — ${failed.map((n) => n.reason).join(' / ')}`;
+        }
+      }
     }
   }
   const g = discovery.git;
@@ -53,7 +61,7 @@ export function buildAuditResult(dir, discovery, run, now = new Date()) {
     meta: {
       target: dir,
       commit: g ? `${g.commit} (미커밋 ${g.uncommittedChanges}건, 원격 대비 뒤처짐 ${g.behindRemote ?? '알 수 없음'})` : 'git 아님',
-      profile: `자동 탐색 — ${discovery.stack.join('/') || '알 수 없음'} (${discovery.supportLevel}). 앱 프로파일은 사용자 확인 전`,
+      profile: `자동 탐색 — ${discovery.stack.join('/') || '알 수 없음'} (${discovery.supportLevel})${discovery.apps?.length ? `, 앱 ${discovery.apps.length}개: ${discovery.apps.map((a) => a.path).join(', ')}` : ''}. 앱 프로파일은 사용자 확인 전`,
       auditedAt: kst(now),
       scope: ['도구 자동 검사'],
       toolsUsed: run.toolsUsed,

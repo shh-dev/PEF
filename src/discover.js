@@ -13,7 +13,10 @@ const git = (dir, ...args) => {
 
 const FRAMEWORKS = ['next', 'react', 'vue', 'svelte', 'nuxt', 'express', 'fastify', 'hono', '@nestjs/core', 'electron', '@supabase/supabase-js', 'vite'];
 
-export function discover(dir) {
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', 'vendor', 'venv', '__pycache__']);
+
+/** 한 폴더의 스택만 본다 (하위 폴더는 안 봄). */
+function detect(dir) {
   const has = (f) => existsSync(join(dir, f));
   const stack = [];
   const frameworks = [];
@@ -32,25 +35,55 @@ export function discover(dir) {
     packageManager = has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : has('package-lock.json') ? 'npm' : has('bun.lockb') ? 'bun' : null;
   }
   if (has('tsconfig.json')) stack.push('typescript');
-  if (has('pyproject.toml') || has('requirements.txt')) stack.push('python');
+  // 패키지 파일 없이 .py 만 있는 앱(의존성은 Dockerfile 의 pip 줄에만 있는 경우)도 파이썬으로 본다.
+  if (has('pyproject.toml') || has('requirements.txt') || (!stack.length && readdirSync(dir).some((n) => n.endsWith('.py')))) stack.push('python');
   if (has('go.mod')) stack.push('go');
   if (has('Cargo.toml')) stack.push('rust');
   if (has('supabase')) frameworks.push('supabase');
   if (has('wrangler.toml') || has('wrangler.jsonc') || has('wrangler.json')) frameworks.push('cloudflare');
+  return { stack, frameworks, packageManager, docker: has('Dockerfile'), tests: ['test', 'tests', '__tests__', 'e2e'].filter(has) };
+}
+
+/** 루트에 패키지 파일이 없는 "앱 여러 개 모음" 저장소용: 하위 폴더(깊이 3까지)에서 앱을 찾는다. 앱을 찾으면 그 안은 더 내려가지 않는다. */
+function findApps(root, rel = '', depth = 0) {
+  if (depth >= 3) return [];
+  let names;
+  try {
+    names = readdirSync(join(root, rel), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const apps = [];
+  for (const d of names) {
+    if (!d.isDirectory() || d.name.startsWith('.') || SKIP_DIRS.has(d.name)) continue;
+    const path = rel ? `${rel}/${d.name}` : d.name;
+    const info = detect(join(root, path));
+    if (info.stack.length) apps.push({ path, ...info });
+    else apps.push(...findApps(root, path, depth + 1));
+  }
+  return apps;
+}
+
+export function discover(dir) {
+  const { stack, frameworks, packageManager, docker, tests } = detect(dir);
+  // 루트에서 스택을 못 찾았거나 워크스페이스면 하위 앱을 찾는다. 단일 앱이면 기존과 같다.
+  const apps = !stack.length || frameworks.includes('monorepo') ? findApps(dir) : [];
+  const allStack = [...new Set([...stack, ...apps.flatMap((a) => a.stack)])];
 
   const dirty = git(dir, 'status', '--short');
   const behind = git(dir, 'rev-list', '--count', 'HEAD..@{u}');
 
   return {
     target: dir,
-    stack,
-    frameworks,
+    stack: allStack,
+    frameworks: [...new Set([...frameworks, ...apps.flatMap((a) => a.frameworks)])],
     packageManager,
     // 지원 수준은 어댑터가 실제로 돌아야 올라간다. 탐지만 되는 지금은 솔직히 Detection Only.
-    supportLevel: stack.length ? 'Detection Only' : 'Unsupported',
-    ci: has('.github/workflows'),
-    docker: has('Dockerfile'),
-    tests: ['test', 'tests', '__tests__', 'e2e'].filter(has),
+    supportLevel: allStack.length ? 'Detection Only' : 'Unsupported',
+    ci: existsSync(join(dir, '.github/workflows')),
+    docker,
+    tests,
+    apps,
     envFiles: readdirSync(dir).filter((n) => n.startsWith('.env')),
     git:
       git(dir, 'rev-parse', '--git-dir') === null
