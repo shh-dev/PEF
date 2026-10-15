@@ -16,3 +16,10 @@ export function loadChecklists() {
   }
   return areas;
 }
+
+// 유형 전용 항목: DK-* 는 데스크톱, MB-* 는 모바일일 때만 점검 대상이다. 나머지 유형(웹 등)에서는 해당 없음으로 센다.
+const ONLY = { DK: 'desktop', MB: 'mobile' };
+export const appliesTo = (id, type) => {
+  const only = ONLY[id.split('-')[0]];
+  return !only || only === type;
+};

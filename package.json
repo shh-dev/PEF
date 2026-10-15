@@ -1,6 +1,6 @@
 {
   "name": "pef",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Product Excellence Framework CLI — 감사 결과 검증·합치기·점수·보고서",
   "type": "module",
   "bin": { "pef": "bin/pef.js" },

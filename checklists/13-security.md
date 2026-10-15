@@ -30,6 +30,11 @@ Finding의 `evidence`에 **시크릿 원본값 금지**(마스킹).
 | SE-22 | **돈·권한을 계산하는 근거 데이터**(환불 금액, 쿠폰 지급, 등급 등)를 사용자가 쓸 수 있는가 | 사용자가 고칠 수 있는 기록으로 금액/혜택 계산 | P1 (재현 시 P0) |
 | SE-23 | 사용자가 넣은 URL을 서버가 가져오는 기능의 허용 대상 제한 (SE-09의 구체 사례) | 내부 주소·메타데이터 주소 접근 가능 | P1 |
 | SE-24 | 로그인 후 `next`/`redirect` 파라미터 검증 (SE-16 확인) | 외부 주소로 이동 가능 | P2 |
+| DK-07 | (데스크톱/Electron) nodeIntegration·contextIsolation·IPC 입력 검증·원격 URL 로딩 | nodeIntegration 켜짐 + 외부 콘텐츠 로딩 | P0 |
+| DK-08 | (데스크톱) 토큰·키를 OS 보안 저장소(Credential Manager/Keychain) 대신 평문 파일·설정에 저장 | 평문 저장 | P1 |
+| MB-02 | (모바일) 매니페스트/Info.plist: debuggable, allowBackup, 불필요한 exported 컴포넌트, ATS 예외 | release 빌드에 디버그·백업 허용 | P1 |
+| MB-03 | (모바일) 로컬 비밀을 Keychain/Keystore 대신 평문(SharedPreferences·UserDefaults)에 저장 | 평문 저장 | P1 |
+| MB-07 | (모바일) 딥링크·푸시 토큰 처리: 입력 검증, 토큰 갱신, 권한 거부 시 동작 | 검증 없는 딥링크로 화면/동작 진입 | P2 |
 
 > SE-01과 11-api의 AP-06은 같은 대조표를 쓴다. 한 번만 작성하고 양쪽 판정에 같은 Finding을 연결한다 (`ruleIds`).
 

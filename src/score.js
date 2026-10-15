@@ -1,5 +1,5 @@
 // docs/SCORING.md 구현. 가중치·매핑·감점표는 그 문서와 같은 값이어야 한다.
-import { loadChecklists } from './checklist.js';
+import { loadChecklists, appliesTo } from './checklist.js';
 
 const SCORE_AREAS = [
   { name: '기능 완결성', weight: 20, areas: ['4.1'] },
@@ -26,9 +26,9 @@ const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
  * 완결성: "다 봤고, 나온 문제마다 처분이 정해졌다"를 보장할 수 있을 때만 complete.
  * 하나라도 비면 어느 항목/Finding이 비었는지 그대로 돌려준다 (총점이 높아도 완결이 아니다).
  */
-function completeness(merged, lists, na) {
+function completeness(merged, lists, na, type) {
   const unjudged = [...lists.values()]
-    .filter((a) => !na.has(a.area)).flatMap((a) => a.ids)
+    .filter((a) => !na.has(a.area)).flatMap((a) => a.ids).filter((id) => appliesTo(id, type))
     .filter((id) => ['NotTested', 'RequiresManualReview', undefined].includes(merged.coverage[id]));
   const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(CLOSED.has(f.fixStatus) && (f.fixStatus !== 'AcceptedRisk' || f.acceptedBy));
   const untriaged = merged.findings.filter((f) => open(f) && (!f.disposition || f.disposition === 'NeedsCheck')).map((f) => f.id);
@@ -48,7 +48,7 @@ export function score(merged, profile = null) {
   // 세부 영역(4.x)
   const detail = new Map();
   for (const [area, { name, ids }] of lists) {
-    const verdicts = ids.map((id) => (na.has(area) ? 'NotApplicable' : merged.coverage[id] ?? 'NotTested'));
+    const verdicts = ids.map((id) => (na.has(area) || !appliesTo(id, profile?.type) ? 'NotApplicable' : merged.coverage[id] ?? 'NotTested'));
     const applicable = verdicts.filter((v) => v !== 'NotApplicable').length;
     const tested = verdicts.filter((v) => TESTED.has(v)).length;
     const deduction = merged.findings
@@ -78,7 +78,7 @@ export function score(merged, profile = null) {
 
   const confirmedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Confirmed' && !CLOSED.has(f.fixStatus));
   const suspectedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Suspected' && !CLOSED.has(f.fixStatus));
-  const complete = completeness(original, lists, na);
+  const complete = completeness(original, lists, na, profile?.type);
   const bySeverity = Object.fromEntries(['P0', 'P1', 'P2', 'P3', 'P4'].map((s) => [s, merged.findings.filter((f) => f.severity === s).length]));
 
   return {

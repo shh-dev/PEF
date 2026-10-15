@@ -240,3 +240,21 @@ test('profile 명령: 저장 후 checkpoint 가 자동으로 따른다', async (
     assert.equal(run(['profile', '없는유형', '--out', out]), 2);
   } finally { console.log = quiet; console.error = qe; }
 });
+
+test('유형 전용 항목: DK-* 는 데스크톱에서만, MB-* 는 모바일에서만 점검 대상 (웹은 해당 없음으로 셈)', async () => {
+  const { appliesTo } = await import('../src/checklist.js');
+  const { buildProfile } = await import('../src/profile.js');
+  assert.equal(appliesTo('DK-01', 'desktop'), true);
+  assert.equal(appliesTo('DK-01', 'web'), false);
+  assert.equal(appliesTo('MB-01', 'mobile'), true);
+  assert.equal(appliesTo('SE-01', 'web'), true);
+  assert.equal(appliesTo('DK-01', undefined), false);
+  const webIds = [...loadChecklists().values()].flatMap((a) => a.ids).filter((id) => appliesTo(id, 'web'));
+  const cov = Object.fromEntries(webIds.map((id) => [id, 'Clean']));
+  assert.equal(score({ findings: [], coverage: cov }).completeness.complete, true); // 웹은 DK/MB 안 봐도 완결
+  const desk = buildProfile('desktop');
+  const s = score({ findings: [], coverage: cov }, desk);
+  assert.equal(s.completeness.complete, false); // 데스크톱으로 확정하면 DK-* 미판정이 남음
+  assert.ok(s.completeness.unjudged.some((id) => id.startsWith('DK-')));
+  assert.ok(!s.completeness.unjudged.some((id) => id.startsWith('MB-')));
+});
