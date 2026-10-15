@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mergeResults } from './merge.js';
+import { mergeResults, continueFrom } from './merge.js';
 import { score } from './score.js';
 import { renderReport } from './report.js';
 import { renderHtml } from './html.js';
@@ -21,6 +21,9 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
   (report 에 --html 을 더하면 사람이 보기 쉬운 report.html 도 만든다)
   pef triage <result.json> --rule ID --disposition ActNow|Plan|NoActionNow --reason "이유" [--severity P3] [--source 도구] [--evidence "근거" --recheck "조건"]
                                              규칙 단위로 처분 일괄 지정 (NoActionNow 는 근거·다시 볼 조건 필수)
+  pef checkpoint [result.json...] --out <.pef> --note "이번에 한 일"
+                                             지속 고도화의 한 바퀴를 마감: 이전 상태에 이어 붙이고 점수 변화·한 일을 기록, report.html 갱신
+  pef status [.pef 폴더]                     이어서 시작할 때 첫 명령: 기록·점수표·남은 일
   pef baseline <result.json...> --out 파일   현재 점수를 기준선으로 저장
   pef compare <기준선.json> <result.json...> 기준선과 비교 (같은 범위일 때만 판정)
 
@@ -64,6 +67,24 @@ export function buildAuditResult(dir, discovery, run, now = new Date()) {
   };
 }
 
+const fmt = (v) => (v === null || v === undefined ? '측정불충분' : `${v}`);
+const diff = (a, b) => (a === null || a === undefined || b === null || b === undefined ? '' : b - a === 0 ? ' (변화 없음)' : ` (${b - a > 0 ? '+' : ''}${b - a})`);
+
+/** 분야별 점수표 + 이번에 한 일 + 남은 일 (사용자에게 매번 보여 줄 텍스트) */
+function progressText(prev, cur, s) {
+  const lines = [`## 분야별 점수 — ${prev ? `${prev.at} → ${cur.at}` : cur.at}`, '', '| 분야 | 이전 | 지금 | 변화 |', '|---|---|---|---|'];
+  cur.groups.forEach((g, i) => {
+    const before = prev?.groups?.[i]?.score;
+    lines.push(`| ${g.name} | ${prev ? fmt(before) : '-'} | ${fmt(g.score)} | ${prev ? diff(before, g.score).trim() || '-' : '-'} |`);
+  });
+  lines.push(`| **총점** | ${prev ? fmt(prev.total) : '-'} | **${fmt(cur.total)}** | ${prev ? diff(prev.total, cur.total).trim() || '-' : '-'} |`);
+  lines.push('', `커버리지 ${cur.coverage}% · 신뢰도 ${cur.confidence} · ${cur.verdict}`);
+  if (cur.note) lines.push(`이번에 한 일: ${cur.note}`);
+  if (cur.newlyFixed) lines.push(`재검사에서 사라져 해결로 확인된 문제: ${cur.newlyFixed}건`);
+  lines.push(`남은 일: 판정 없는 항목 ${s.completeness.unjudged.length}개 · 처분 없는 문제 ${s.completeness.untriaged.length}건 · ${s.completeness.complete ? '✅ 완결' : '❌ 미완결 (계속 진행)'}`);
+  return lines.join('\n');
+}
+
 export function run(argv) {
   const [cmd, ...rest] = argv;
   const flags = {};
@@ -72,6 +93,7 @@ export function run(argv) {
     if (rest[i] === '--out') flags.out = rest[++i];
     else if (rest[i] === '--json') flags.json = true;
     else if (rest[i] === '--html') flags.html = true;
+    else if (rest[i] === '--note') flags.note = rest[++i];
     else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
     else args.push(rest[i]);
   }
@@ -156,6 +178,64 @@ export function run(argv) {
       if (errs.length) return fail(`처분 적용 후 검증 실패 (저장 안 함):\n${errs.slice(0, 5).join('\n')}`);
       writeFileSync(resolve(file), JSON.stringify(r, null, 2));
       console.log(`${n}건에 ${flags.disposition} 처분 적용`);
+      return 0;
+    }
+
+    if (cmd === 'checkpoint') {
+      // 고도화는 지속 작업이다: 매 반복의 끝에 호출 → 이전 상태에 이어 붙이고, 점수 변화·한 일을 기록하고, 보고서를 갱신한다.
+      const out = resolve(flags.out ?? '.pef');
+      mkdirSync(out, { recursive: true });
+      const cur = `${out}/current.json`;
+      const histFile = `${out}/history.json`;
+      const history = existsSync(histFile) ? readJson(histFile) : [];
+      const prior = existsSync(cur) ? readJson(cur) : null;
+      let merged;
+      let newlyFixed = 0;
+      if (args.length) {
+        const r = mergeResults(load(args));
+        if (r.errors.length) return fail(`스키마 오류:\n${r.errors.join('\n')}`);
+        if (prior) ({ merged, newlyFixed } = continueFrom(prior, r.merged));
+        else merged = r.merged;
+      } else if (prior) merged = prior; // 결과 파일 없이 부르면 current.json(예: fixStatus 수정분)만 다시 계산
+      else return fail('이어갈 current.json 이 없습니다. result.json 을 같이 주세요');
+      const errs = validateResult(merged);
+      if (errs.length) return fail(`검증 실패 (저장 안 함):\n${errs.slice(0, 8).join('\n')}`);
+
+      const s = score(merged);
+      const entry = {
+        at: kst(),
+        commit: merged.meta.commit,
+        note: flags.note ?? '',
+        total: s.total,
+        coverage: s.coverage,
+        confidence: s.confidence,
+        verdict: s.verdict,
+        complete: s.completeness.complete,
+        groups: s.groups.map((g) => ({ name: g.name, score: g.score, coverage: g.coverage })),
+        counts: s.counts,
+        newlyFixed,
+      };
+      const prev = history.at(-1);
+      history.push(entry);
+      writeFileSync(cur, JSON.stringify(merged, null, 2));
+      writeFileSync(histFile, JSON.stringify(history, null, 2));
+      writeFileSync(`${out}/report.md`, renderReport(merged, s));
+      writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history));
+      console.log(progressText(prev, entry, s));
+      console.log(`\n저장: ${out} (current.json, history.json, report.html)`);
+      return s.verdict.startsWith('출시') ? 1 : 0;
+    }
+
+    if (cmd === 'status') {
+      // 새 세션이 이어서 시작할 때 첫 번째로 부르는 명령: 지금까지의 기록과 남은 일
+      const out = resolve(args[0] ?? '.pef');
+      if (!existsSync(`${out}/history.json`)) return fail(`${out} 에 기록이 없습니다 — 처음부터 시작하세요 (pef audit)`);
+      const history = readJson(`${out}/history.json`);
+      const merged = readJson(`${out}/current.json`);
+      const s = score(merged);
+      console.log(progressText(history.at(-2), history.at(-1), s));
+      console.log('\n지금까지의 기록');
+      history.forEach((e, i) => console.log(`  ${String(i + 1).padStart(2, '0')}. ${e.at}  ${e.total ?? '-'}점  ${e.note || ''}`));
       return 0;
     }
 

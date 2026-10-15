@@ -15,6 +15,8 @@ const DEDUCT = {
   Confirmed: { P0: 40, P1: 15, P2: 6, P3: 2, P4: 0 },
   Suspected: { P0: 20, P1: 8, P2: 3, P3: 1, P4: 0 },
 };
+// 고쳐졌거나(Fixed/Verified) 승인된 위험(AcceptedRisk)은 더 이상 감점·차단·미완결 요인이 아니다
+const CLOSED = new Set(['Fixed', 'Verified', 'AcceptedRisk']);
 const TESTED = new Set(['Clean', 'Confirmed', 'Suspected']);
 const confidence = (c) => (c >= 0.8 ? '높음' : c >= 0.5 ? '중간' : '낮음');
 const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
@@ -28,7 +30,7 @@ function completeness(merged, lists) {
   const unjudged = [...lists.values()]
     .flatMap((a) => a.ids)
     .filter((id) => ['NotTested', 'RequiresManualReview', undefined].includes(merged.coverage[id]));
-  const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(f.fixStatus === 'AcceptedRisk' && f.acceptedBy);
+  const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(CLOSED.has(f.fixStatus) && (f.fixStatus !== 'AcceptedRisk' || f.acceptedBy));
   const untriaged = merged.findings.filter((f) => open(f) && (!f.disposition || f.disposition === 'NeedsCheck')).map((f) => f.id);
   return { complete: !unjudged.length && !untriaged.length, unjudged, untriaged };
 }
@@ -49,7 +51,7 @@ export function score(merged) {
     const applicable = verdicts.filter((v) => v !== 'NotApplicable').length;
     const tested = verdicts.filter((v) => TESTED.has(v)).length;
     const deduction = merged.findings
-      .filter((f) => areaOf(f) === area && DEDUCT[f.verification] && f.fixStatus !== 'AcceptedRisk')
+      .filter((f) => areaOf(f) === area && DEDUCT[f.verification] && !CLOSED.has(f.fixStatus))
       .reduce((s, f) => s + DEDUCT[f.verification][f.severity], 0);
     detail.set(area, { area, name, applicable, tested, score: Math.max(0, 100 - deduction) });
   }
@@ -72,8 +74,8 @@ export function score(merged) {
   const tested = groups.reduce((s, g) => s + g.tested, 0);
   const coverage = applicable ? tested / applicable : 0;
 
-  const confirmedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Confirmed' && f.fixStatus !== 'AcceptedRisk');
-  const suspectedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Suspected' && f.fixStatus !== 'AcceptedRisk');
+  const confirmedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Confirmed' && !CLOSED.has(f.fixStatus));
+  const suspectedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Suspected' && !CLOSED.has(f.fixStatus));
   const complete = completeness(original, lists);
   const bySeverity = Object.fromEntries(['P0', 'P1', 'P2', 'P3', 'P4'].map((s) => [s, merged.findings.filter((f) => f.severity === s).length]));
 
@@ -89,6 +91,7 @@ export function score(merged) {
         : !complete.complete
           ? '차단 근거 없음 (미완결 — 안전하다는 보장 아님)'
           : '차단 없음',
+    detail: [...detail.values()],
     groups: groups.map((g) => ({ ...g, coverage: pct(g.tested, g.applicable) })),
     weakAreas: [...detail.values()].filter((d) => d.tested > 0 && d.score < 50),
     lowest: [...detail.values()].filter((d) => d.tested > 0).sort((a, b) => a.score - b.score).slice(0, 4),

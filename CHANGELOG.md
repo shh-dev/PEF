@@ -18,3 +18,6 @@
 
 ## 0.3.0
 - `pef triage`(규칙 단위 일괄 처분), `report --html`(사람이 보기 쉬운 단일 HTML 보고서)
+
+## 0.4.0
+- 지속 고도화: `pef checkpoint`(이전 상태에 이어 붙이기·점수 변화 기록·report.html 갱신), `pef status`(이어서 시작). 재검사에서 사라진 도구 Finding은 자동 Verified. PLAYBOOK §0.6

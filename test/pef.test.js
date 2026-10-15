@@ -156,3 +156,29 @@ test('triage: 규칙 단위 일괄 처분, 이미 정한 처분은 덮어쓰지 
     assert.equal(JSON.parse(readFileSync(p, 'utf8')).findings[2].disposition, undefined);
   } finally { console.log = quiet; console.error = qe; }
 });
+
+test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진 도구 Finding 은 Verified, 점수 변화가 기록된다', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { run } = await import('../src/cli.js');
+  const dir = mkdtempSync(`${tmpdir()}/pef-ck-`);
+  const out = `${dir}/.pef`;
+  const base = all('Clean');
+  const bad = finding({ id: 'F-001', ruleId: 'SE-11', source: 'osv-scanner', verification: 'Confirmed', severity: 'P1', disposition: 'ActNow', line: null });
+  writeFileSync(`${dir}/r1.json`, JSON.stringify(result({ findings: [bad], coverage: { ...base, 'SE-11': 'Confirmed' } })));
+  writeFileSync(`${dir}/r2.json`, JSON.stringify(result({ findings: [], coverage: base })));
+  const quiet = console.log; const logs = []; console.log = (m) => logs.push(m);
+  try {
+    assert.equal(run(['checkpoint', `${dir}/r1.json`, '--out', out, '--note', '처음 점검']), 0);
+    assert.equal(run(['checkpoint', `${dir}/r2.json`, '--out', out, '--note', 'lodash 업그레이드']), 0);
+    const hist = JSON.parse(readFileSync(`${out}/history.json`, 'utf8'));
+    assert.equal(hist.length, 2);
+    assert.ok(hist[1].total > hist[0].total, '고친 뒤 점수가 올라야 함');
+    assert.equal(hist[1].newlyFixed, 1);
+    const cur = JSON.parse(readFileSync(`${out}/current.json`, 'utf8'));
+    assert.equal(cur.findings[0].fixStatus, 'Verified');
+    assert.ok(logs.join('\n').includes('lodash 업그레이드'));
+    assert.equal(run(['status', out]), 0);
+    assert.ok(readFileSync(`${out}/report.html`, 'utf8').includes('고도화 진행 기록'));
+  } finally { console.log = quiet; }
+});
