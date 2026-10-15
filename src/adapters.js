@@ -3,6 +3,9 @@
 //  - 대상 폴더는 읽기만 한다. 도구 출력은 마스킹을 거쳐 Finding에 들어간다.
 //  - 도구가 실패/타임아웃이면 "통과"가 아니라 NotTested.
 import { execSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { mask } from './mask.js';
 
 const TIMEOUT_MS = 120_000;
@@ -140,13 +143,20 @@ export function parseDepcruise(json) {
   return out;
 }
 
+// 설정 없이 돌리면 규칙이 없어 순환이 있어도 Clean으로 나오고 node_modules까지 훑는다 → 임시 설정 파일(대상 밖)을 쓴다.
+function depcruiseArgs() {
+  const cfg = join(mkdtempSync(join(tmpdir(), 'pef-dc-')), 'dc.json');
+  writeFileSync(cfg, JSON.stringify({ forbidden: [{ name: 'no-circular', severity: 'warn', from: {}, to: { circular: true } }], options: { doNotFollow: { path: 'node_modules' }, exclude: { path: '(node_modules|\.next|\.git|dist|build|coverage)' } } }));
+  return ['--config', cfg, '--output-type', 'json', '.'];
+}
+
 // ── 어댑터 목록 ──────────────────────────────────────────────────────────────
 
 export const ADAPTERS = [
   { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
   { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '.'], parse: parseSemgrep, items: [] },
   { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
-  { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: ['--output-type', 'json', '--no-config', '.'], parse: parseDepcruise, items: ['AR-02'] },
+  { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },
 ];
 
 /**
@@ -167,7 +177,7 @@ export function runAdapters(dir, discovery) {
       continue;
     }
     try {
-      findings.push(...a.parse(runTool(cmd, a.args, dir, a.emptyStatus)));
+      findings.push(...a.parse(runTool(cmd, typeof a.args === 'function' ? a.args() : a.args, dir, a.emptyStatus)));
       toolsUsed.push(a.id);
     } catch (e) {
       notTested.push({ tool: a.id, reason: `실행 실패/타임아웃: ${mask(e.message).split('\n')[0]}` });
