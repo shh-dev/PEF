@@ -182,3 +182,61 @@ test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진
     assert.ok(readFileSync(`${out}/report.html`, 'utf8').includes('고도화 진행 기록'));
   } finally { console.log = quiet; }
 });
+
+async function tmpProject(files) {
+  const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { dirname, join } = await import('node:path');
+  const dir = mkdtempSync(`${tmpdir()}/pef-c-`);
+  for (const [name, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), typeof content === 'string' ? content : JSON.stringify(content));
+  }
+  return dir;
+}
+
+test('분류: 웹앱·데스크톱·API·CLI·Tauri·알 수 없음', async () => {
+  const { classify } = await import('../src/classify.js');
+  const web = classify(await tmpProject({ 'package.json': { dependencies: { next: '1', react: '1', 'react-dom': '1' } }, 'wrangler.jsonc': '{}' }));
+  assert.equal(web.types[0].type, 'web');
+  assert.ok(web.platforms.some((p) => p.includes('Cloudflare')));
+  const el = classify(await tmpProject({ 'package.json': { dependencies: { electron: '1', react: '1', 'react-dom': '1' }, build: { win: {}, mac: {} } } }));
+  assert.equal(el.types[0].type, 'desktop'); // 웹 프레임워크가 같이 있어도 electron 이 우선
+  assert.deepEqual(el.platforms.filter((p) => ['Windows', 'macOS'].includes(p)), ['Windows', 'macOS']);
+  assert.equal(classify(await tmpProject({ 'package.json': { dependencies: { express: '1' } } })).types[0].type, 'api-server');
+  assert.equal(classify(await tmpProject({ 'package.json': { bin: { x: 'a.js' } } })).types[0].type, 'cli');
+  assert.equal(classify(await tmpProject({ 'src-tauri/tauri.conf.json': '{}' })).types[0].type, 'desktop');
+  assert.equal(classify(await tmpProject({ 'readme.txt': 'x' })).types[0].type, 'unknown');
+});
+
+test('프로파일: API 서버는 UI 영역이 해당 없음 → 판정 안 해도 미완결 요인 아님, 가중치 변경이 보고됨', async () => {
+  const { buildProfile } = await import('../src/profile.js');
+  const p = buildProfile('api-server');
+  const lists = loadChecklists();
+  const noUi = Object.fromEntries([...lists.values()].filter((a) => !p.notApplicable.includes(a.area)).flatMap((a) => a.ids).map((id) => [id, 'Clean']));
+  const withProfile = score({ findings: [], coverage: noUi }, p);
+  assert.equal(withProfile.completeness.complete, true);
+  assert.equal(withProfile.groups.find((g) => g.name === 'UX/UI 완성도').na, true);
+  assert.equal(withProfile.total, 100);
+  assert.equal(score({ findings: [], coverage: noUi }).completeness.complete, false); // 프로파일 없으면 UI 항목 미판정 → 미완결
+  assert.ok(p.weightChanges.length > 0);
+});
+
+test('profile 명령: 저장 후 checkpoint 가 자동으로 따른다', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { run } = await import('../src/cli.js');
+  const dir = mkdtempSync(`${tmpdir()}/pef-p-`);
+  const out = `${dir}/.pef`;
+  const cov = Object.fromEntries([...loadChecklists().values()].filter((a) => !['4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.20'].includes(a.area)).flatMap((a) => a.ids).map((id) => [id, 'Clean']));
+  writeFileSync(`${dir}/r.json`, JSON.stringify(result({ coverage: cov })));
+  const quiet = console.log; const qe = console.error; console.log = () => {}; console.error = () => {};
+  try {
+    assert.equal(run(['profile', 'api-server', '--out', out, '--note', '사용자: 서버만']), 0);
+    assert.equal(run(['checkpoint', `${dir}/r.json`, '--out', out, '--note', 'x']), 0);
+    const hist = JSON.parse(readFileSync(`${out}/history.json`, 'utf8'));
+    assert.equal(hist[0].complete, true);
+    assert.ok(readFileSync(`${out}/report.html`, 'utf8').includes('앱 분류와 고도화 방향'));
+    assert.equal(run(['profile', '없는유형', '--out', out]), 2);
+  } finally { console.log = quiet; console.error = qe; }
+});

@@ -26,9 +26,9 @@ const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
  * 완결성: "다 봤고, 나온 문제마다 처분이 정해졌다"를 보장할 수 있을 때만 complete.
  * 하나라도 비면 어느 항목/Finding이 비었는지 그대로 돌려준다 (총점이 높아도 완결이 아니다).
  */
-function completeness(merged, lists) {
+function completeness(merged, lists, na) {
   const unjudged = [...lists.values()]
-    .flatMap((a) => a.ids)
+    .filter((a) => !na.has(a.area)).flatMap((a) => a.ids)
     .filter((id) => ['NotTested', 'RequiresManualReview', undefined].includes(merged.coverage[id]));
   const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(CLOSED.has(f.fixStatus) && (f.fixStatus !== 'AcceptedRisk' || f.acceptedBy));
   const untriaged = merged.findings.filter((f) => open(f) && (!f.disposition || f.disposition === 'NeedsCheck')).map((f) => f.id);
@@ -36,7 +36,8 @@ function completeness(merged, lists) {
 }
 
 /** @param {{findings: object[], coverage: Record<string,string>}} merged */
-export function score(merged) {
+export function score(merged, profile = null) {
+  const na = new Set(profile?.notApplicable ?? []); // 앱 유형상 해당 없는 영역 (프로파일)
   const lists = loadChecklists();
   const areaOf = (f) => f.category.match(/^4\.\d+/)?.[0];
 
@@ -47,7 +48,7 @@ export function score(merged) {
   // 세부 영역(4.x)
   const detail = new Map();
   for (const [area, { name, ids }] of lists) {
-    const verdicts = ids.map((id) => merged.coverage[id] ?? 'NotTested');
+    const verdicts = ids.map((id) => (na.has(area) ? 'NotApplicable' : merged.coverage[id] ?? 'NotTested'));
     const applicable = verdicts.filter((v) => v !== 'NotApplicable').length;
     const tested = verdicts.filter((v) => TESTED.has(v)).length;
     const deduction = merged.findings
@@ -57,14 +58,15 @@ export function score(merged) {
   }
 
   // 점수 영역
-  const groups = SCORE_AREAS.map((g) => {
+  const groups = SCORE_AREAS.map((g0) => {
+    const g = { ...g0, weight: profile?.weights?.[g0.name] ?? g0.weight };
     const ds = g.areas.map((a) => detail.get(a)).filter((d) => d.applicable > 0);
     const applicable = ds.reduce((s, d) => s + d.applicable, 0);
     const tested = ds.reduce((s, d) => s + d.tested, 0);
     const coverage = applicable ? tested / applicable : 0;
     const measured = ds.filter((d) => d.tested > 0);
     const insufficient = !applicable || coverage < 0.5 || !measured.length;
-    return { ...g, applicable, tested, coverage, insufficient, score: insufficient ? null : Math.round(avg(measured.map((d) => d.score))) };
+    return { ...g, na: !applicable, applicable, tested, coverage, insufficient, score: insufficient ? null : Math.round(avg(measured.map((d) => d.score))) };
   });
 
   const counted = groups.filter((g) => !g.insufficient);
@@ -76,7 +78,7 @@ export function score(merged) {
 
   const confirmedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Confirmed' && !CLOSED.has(f.fixStatus));
   const suspectedP0 = merged.findings.filter((f) => f.severity === 'P0' && f.verification === 'Suspected' && !CLOSED.has(f.fixStatus));
-  const complete = completeness(original, lists);
+  const complete = completeness(original, lists, na);
   const bySeverity = Object.fromEntries(['P0', 'P1', 'P2', 'P3', 'P4'].map((s) => [s, merged.findings.filter((f) => f.severity === s).length]));
 
   return {

@@ -21,3 +21,7 @@
 
 ## 0.4.0
 - 지속 고도화: `pef checkpoint`(이전 상태에 이어 붙이기·점수 변화 기록·report.html 갱신), `pef status`(이어서 시작). 재검사에서 사라진 도구 Finding은 자동 Verified. PLAYBOOK §0.6
+
+## 0.5.0
+- `pef discover`가 앱 유형(웹·데스크톱·모바일·API·CLI/라이브러리·배치/봇)과 대상 OS/배포 환경을 근거·신뢰도와 함께 추정, `pef profile`로 확정하면 유형별 방향·가중치·해당 없음 영역이 점수와 보고서에 자동 반영 (PLAYBOOK §1.5)
+- 한계: 데스크톱·모바일·비-Node 전용 체크리스트 항목은 아직 없음

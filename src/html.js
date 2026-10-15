@@ -39,7 +39,7 @@ function group(title, hint, findings, open = false) {
   return `<section><details ${open ? 'open' : ''}><summary class="sec">${esc(title)} <span class="n">${findings.length}</span></summary><p class="hint">${esc(hint)}</p>${body}</details></section>`;
 }
 
-export function renderHtml(merged, s, now = new Date(), history = []) {
+export function renderHtml(merged, s, now = new Date(), history = [], profile = null) {
   const m = merged.meta;
   const all = merged.findings;
   const dispo = (d) => all.filter((f) => f.disposition === d && !['FalsePositive', 'NotApplicable'].includes(f.verification));
@@ -53,7 +53,7 @@ export function renderHtml(merged, s, now = new Date(), history = []) {
 
   const rows = s.groups
     .map(
-      (g) => `<tr><td>${esc(g.name)}</td><td>${g.insufficient ? '<span class="dim">측정 불충분</span>' : `<div class="bar"><i style="width:${g.score}%"></i></div> <b>${g.score}</b>`}</td><td>${g.coverage}% <span class="dim">(${g.tested}/${g.applicable})</span></td></tr>`,
+      (g) => `<tr><td>${esc(g.name)}</td><td>${g.na ? '<span class="dim">해당 없음</span>' : g.insufficient ? '<span class="dim">측정 불충분</span>' : `<div class="bar"><i style="width:${g.score}%"></i></div> <b>${g.score}</b>`}</td><td>${g.coverage}% <span class="dim">(${g.tested}/${g.applicable})</span></td></tr>`,
     )
     .join('');
 
@@ -85,6 +85,7 @@ ul{list-style:none;padding:0;margin:0}.f{border-top:1px solid var(--line);paddin
 <h1>PEF 보고서 — ${esc(m.target)}</h1>
 <div class="sub">만든 시각 ${esc(kst(now))} · 검사 ${esc(m.auditedAt)} · 코드 버전 ${esc(m.commit)}</div>
 
+${profile ? `<div class="card"><b>앱 분류와 고도화 방향</b><p><b>${esc(profile.label)}</b> — ${esc(profile.direction)}</p><p class="hint">점수 가중치 기본값 대비 변경: ${esc(profile.weightChanges.length ? profile.weightChanges.join(', ') : '없음')} · 해당 없음 영역: ${esc(profile.notApplicable.length ? profile.notApplicable.join(', ') : '없음')}<br>이유: ${esc(profile.why)}</p></div>` : ''}
 <div class="card verdict ${tone}">
   <h2>${esc(s.verdict)}</h2>
   <div>${scoreText} · 커버리지 ${s.coverage}% · 신뢰도 ${esc(s.confidence)}</div>

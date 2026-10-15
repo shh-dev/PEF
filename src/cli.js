@@ -5,6 +5,8 @@ import { score } from './score.js';
 import { renderReport } from './report.js';
 import { renderHtml } from './html.js';
 import { discover } from './discover.js';
+import { classify, TYPE_LABEL } from './classify.js';
+import { buildProfile, profileKey, PROFILES } from './profile.js';
 import { runAdapters, ADAPTERS } from './adapters.js';
 import { validateResult } from './schema.js';
 import { mask } from './mask.js';
@@ -15,6 +17,7 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
 사용법:
   pef discover [폴더]                        스택·git 상태 탐색 (JSON)
   pef audit [폴더] [--out 폴더]              설치된 검사 도구를 돌려 result 파일 생성 (기본 출력: <폴더>/.pef)
+  pef profile <유형> --out <.pef>             사용자가 확인한 앱 유형 저장 (방향·가중치·해당 없음 영역 결정). discover 가 유형을 추정해 줌
   pef validate <result.json...>              결과 파일이 스키마에 맞는지 검사
   pef report <result.json...> [--out 폴더] [--json]
                                              합치기 → 점수 → report.md (+ score.json)
@@ -94,9 +97,15 @@ export function run(argv) {
     else if (rest[i] === '--json') flags.json = true;
     else if (rest[i] === '--html') flags.html = true;
     else if (rest[i] === '--note') flags.note = rest[++i];
+    else if (rest[i] === '--profile') flags.profile = rest[++i];
     else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
     else args.push(rest[i]);
   }
+  // 확정된 앱 프로파일(.pef/profile.json 또는 --profile 파일). 없으면 기본 가중치.
+  const profileOf = (outDir) => {
+    const p = flags.profile ?? (outDir ? `${outDir}/profile.json` : null);
+    return p && existsSync(resolve(p)) ? readJson(p) : null;
+  };
   const load = (files) => files.map((f) => ({ name: f, result: readJson(f) }));
 
   try {
@@ -106,7 +115,24 @@ export function run(argv) {
     }
 
     if (cmd === 'discover') {
-      console.log(JSON.stringify(discover(resolve(args[0] ?? '.')), null, 2));
+      const dir = resolve(args[0] ?? '.');
+      const c = classify(dir);
+      const main = c.types[0];
+      console.log(JSON.stringify({ ...discover(dir), classification: { ...c, 추정: TYPE_LABEL[profileKey(main.type)] }, proposedProfile: buildProfile(main.type), 다음: '사용자에게 유형을 확인받고 pef profile <유형> --out <.pef> 로 확정' }, null, 2));
+      return 0;
+    }
+
+    if (cmd === 'profile') {
+      // 사용자가 확인한 앱 유형을 저장한다. 이후 점수(가중치·해당 없음)와 보고서가 이 프로파일을 따른다.
+      const [type] = args;
+      if (!type || !flags.out) return fail(`사용법: pef profile <${Object.keys(PROFILES).join('|')}> --out <.pef 폴더> [--note "사용자 답변 요약"]`);
+      const p = buildProfile(type, { confirmedAt: kst(), note: flags.note ?? '' });
+      mkdirSync(resolve(flags.out), { recursive: true });
+      writeFileSync(resolve(flags.out, 'profile.json'), JSON.stringify(p, null, 2));
+      console.log(`프로파일 저장: ${p.label}
+방향: ${p.direction}
+기본값 대비 변경: ${p.weightChanges.join(', ') || '없음'}
+해당 없음 영역: ${p.notApplicable.join(', ') || '없음'} (${p.why})`);
       return 0;
     }
 
@@ -139,7 +165,8 @@ export function run(argv) {
       if (!args.length) return fail('result.json 경로가 필요합니다');
       const { errors, merged } = mergeResults(load(args));
       if (errors.length) return fail(`스키마 오류:\n${errors.join('\n')}`);
-      const s = score(merged);
+      const profile = profileOf(flags.out && resolve(flags.out));
+      const s = score(merged, profile);
       if (cmd === 'baseline') {
         if (!flags.out) return fail('--out 기준선 파일 경로가 필요합니다');
         const scope = Object.keys(merged.coverage).sort();
@@ -147,12 +174,12 @@ export function run(argv) {
         console.log(`기준선 저장: ${resolve(flags.out)}`);
         return 0;
       }
-      const md = renderReport(merged, s);
+      const md = renderReport(merged, s, new Date(), profile);
       if (flags.out) {
         const out = resolve(flags.out);
         mkdirSync(out, { recursive: true });
         writeFileSync(`${out}/report.md`, md);
-        if (flags.html) writeFileSync(`${out}/report.html`, renderHtml(merged, s));
+        if (flags.html) writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), [], profile));
         if (flags.json) writeFileSync(`${out}/score.json`, JSON.stringify({ score: s, merged }, null, 2));
         console.log(`저장: ${out}/report.md`);
       } else console.log(flags.json ? JSON.stringify(s, null, 2) : md);
@@ -201,7 +228,8 @@ export function run(argv) {
       const errs = validateResult(merged);
       if (errs.length) return fail(`검증 실패 (저장 안 함):\n${errs.slice(0, 8).join('\n')}`);
 
-      const s = score(merged);
+      const profile = profileOf(out);
+      const s = score(merged, profile);
       const entry = {
         at: kst(),
         commit: merged.meta.commit,
@@ -219,8 +247,8 @@ export function run(argv) {
       history.push(entry);
       writeFileSync(cur, JSON.stringify(merged, null, 2));
       writeFileSync(histFile, JSON.stringify(history, null, 2));
-      writeFileSync(`${out}/report.md`, renderReport(merged, s));
-      writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history));
+      writeFileSync(`${out}/report.md`, renderReport(merged, s, new Date(), profile));
+      writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history, profile));
       console.log(progressText(prev, entry, s));
       console.log(`\n저장: ${out} (current.json, history.json, report.html)`);
       return s.verdict.startsWith('출시') ? 1 : 0;
@@ -232,7 +260,7 @@ export function run(argv) {
       if (!existsSync(`${out}/history.json`)) return fail(`${out} 에 기록이 없습니다 — 처음부터 시작하세요 (pef audit)`);
       const history = readJson(`${out}/history.json`);
       const merged = readJson(`${out}/current.json`);
-      const s = score(merged);
+      const s = score(merged, profileOf(out));
       console.log(progressText(history.at(-2), history.at(-1), s));
       console.log('\n지금까지의 기록');
       history.forEach((e, i) => console.log(`  ${String(i + 1).padStart(2, '0')}. ${e.at}  ${e.total ?? '-'}점  ${e.note || ''}`));
