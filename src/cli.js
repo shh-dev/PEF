@@ -6,6 +6,7 @@ import { renderReport } from './report.js';
 import { renderHtml } from './html.js';
 import { discover } from './discover.js';
 import { runAdapters, ADAPTERS } from './adapters.js';
+import { inspectIntegrations } from './integrations.js';
 import { validateResult } from './schema.js';
 import { mask } from './mask.js';
 import { kst, kstStamp } from './time.js';
@@ -15,6 +16,8 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
 사용법:
   pef discover [폴더]                        스택·git 상태 탐색 (JSON)
   pef audit [폴더] [--out 폴더]              설치된 검사 도구를 돌려 result 파일 생성 (기본 출력: <폴더>/.pef)
+  pef integrations [폴더] [--out 폴더] [--json]
+                                             환경변수 이름·참조 위치, CI 시크릿 이름, .env 파일 git 상태, MCP 설정, 외부 서비스 후보 (값은 읽지 않음)
   pef validate <result.json...>              결과 파일이 스키마에 맞는지 검사
   pef report <result.json...> [--out 폴더] [--json]
                                              합치기 → 점수 → report.md (+ score.json)
@@ -64,6 +67,40 @@ export function buildAuditResult(dir, discovery, run, now = new Date()) {
   };
 }
 
+/** integrations: 위험 Finding 을 result.schema 형식으로. 이름만 보고 판단했으므로 SE-10 을 Clean 으로 만들지 않는다. */
+export function buildIntegrationsResult(dir, discovery, inv, now = new Date()) {
+  const findings = inv.findings.map((f, i) => ({ id: `I-${String(i + 1).padStart(3, '0')}`, firstDetected: now.toISOString(), ...f }));
+  const g = discovery.git;
+  return {
+    meta: {
+      target: dir,
+      commit: g ? `${g.commit} (미커밋 ${g.uncommittedChanges}건, 원격 대비 뒤처짐 ${g.behindRemote ?? '알 수 없음'})` : 'git 아님',
+      profile: `자동 탐색 — ${discovery.stack.join('/') || '알 수 없음'} (${discovery.supportLevel}). 앱 프로파일은 사용자 확인 전`,
+      auditedAt: kst(now),
+      scope: ['연동·시크릿 이름 탐색 (pef integrations)'],
+      toolsUsed: ['pef-integrations'],
+    },
+    findings,
+    coverage: findings.length ? { 'SE-10': 'Suspected' } : {},
+    coverageNotes: { 'SE-10': findings.length ? `pef-integrations: 이름·설정 기준 의심 ${findings.length}건` : 'pef-integrations: 이름 기준 문제 없음. git 이력·번들·로그는 미검사라 Clean 아님' },
+  };
+}
+
+function printIntegrations(inv) {
+  const lines = [];
+  lines.push(`외부 서비스 ${inv.services.length}개 (연결 확인은 하지 않음 — 전부 NotTested)`);
+  for (const s of inv.services) lines.push(`  ${s.status === 'Configured' ? '●' : '○'} ${s.service} [${s.status}] ← ${s.evidence.map((e) => `${e.kind}:${e.detail}`).join(', ')}`);
+  lines.push(`환경변수 ${inv.envVars.length}개 (이름·참조 위치만)`);
+  for (const v of inv.envVars) lines.push(`  ${v.name}${v.clientExposed ? ' [브라우저 공개]' : ''} ← ${v.refs.slice(0, 3).map((r) => `${r.file}:${r.line}`).join(', ')}${v.refs.length > 3 ? ` 외 ${v.refs.length - 3}곳` : ''}`);
+  if (inv.ciSecrets.length) lines.push(`CI 시크릿/변수 ${inv.ciSecrets.length}개: ${inv.ciSecrets.map((c) => `${c.kind}.${c.name}`).join(', ')}`);
+  if (inv.envFiles.length) lines.push(`.env 파일 (내용은 열지 않음): ${inv.envFiles.map((e) => `${e.name}${e.tracked ? ' [git 추적됨!]' : e.ignored ? '' : ' [ignore 안 됨]'}`).join(', ')}`);
+  lines.push(`MCP 서버 ${inv.mcpServers.length}개 (프로젝트 설정만, 도구 호출 안 함)`);
+  for (const m of inv.mcpServers) lines.push(`  ${m.name} — ${m.client} ${m.transport}${m.command ? ` ${m.command}` : ''}${m.endpoint ? ` ${m.endpoint}` : ''}${m.envNames.length ? ` env:${m.envNames.join(',')}` : ''}${m.risks.length ? ` ⚠ ${m.risks.join('; ')}` : ''}`);
+  lines.push(`위험 의심 ${inv.findings.length}건`);
+  for (const f of inv.findings) lines.push(`  [${f.severity}] ${f.title}`);
+  return lines.join('\n');
+}
+
 export function run(argv) {
   const [cmd, ...rest] = argv;
   const flags = {};
@@ -99,6 +136,25 @@ export function run(argv) {
       console.log(`저장: ${file}`);
       console.log(`실행한 도구: ${result.meta.toolsUsed.join(', ') || '없음'}`);
       for (const [id, note] of Object.entries(result.coverageNotes)) console.log(`  미검사 ${id}: ${note}`);
+      return 0;
+    }
+
+    if (cmd === 'integrations') {
+      const dir = resolve(args[0] ?? '.');
+      const inv = inspectIntegrations(dir);
+      if (flags.json && !flags.out) {
+        console.log(mask(JSON.stringify(inv, null, 2)));
+        return 0;
+      }
+      console.log(mask(printIntegrations(inv)));
+      if (flags.out) {
+        const out = resolve(flags.out);
+        mkdirSync(out, { recursive: true });
+        const stamp = kstStamp();
+        writeFileSync(`${out}/${stamp}_integrations.json`, mask(JSON.stringify(inv, null, 2)));
+        writeFileSync(`${out}/${stamp}_integrations_result.json`, JSON.stringify(buildIntegrationsResult(dir, discover(dir), inv), null, 2));
+        console.log(`저장: ${out}/${stamp}_integrations.json, ${stamp}_integrations_result.json`);
+      }
       return 0;
     }
 
