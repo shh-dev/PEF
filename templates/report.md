@@ -1,6 +1,6 @@
 # PEF 보고서 — {프로젝트명}
 
-- 검사일시: {YYYY-MM-DD HH:mm:ss KST}
+- 검사일시: {YYYY-MM-DD HH:mm:ss KST} (모든 시각 KST, 24시간제)
 - Git commit: {hash}
 - 앱 프로파일: {유형 / 핵심 목표 / 운영 여부}
 - 가중치 변경(기본 대비): {없음 | 영역: 기본→변경, 사유}
