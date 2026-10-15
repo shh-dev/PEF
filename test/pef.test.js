@@ -128,3 +128,31 @@ test('OSV: 취약 버전 설치는 사실이지만 사용 여부를 모르므로
   assert.equal(osv[0].verification, 'Suspected');
   assert.equal(osv[0].disposition, 'NeedsCheck');
 });
+
+test('HTML 보고서: 이스케이프·마스킹, 처분별 섹션', async () => {
+  const { renderHtml } = await import('../src/html.js');
+  const f = finding({ title: '<script>x</script> API_KEY=abcdef123456', disposition: 'ActNow', impact: '쉬운 설명' });
+  const merged = { meta: result().meta, findings: [f], coverage: all('Clean'), coverageNotes: {} };
+  const html = renderHtml(merged, score(merged));
+  assert.ok(!html.includes('<script>x'));
+  assert.ok(!html.includes('abcdef123456'));
+  assert.ok(html.includes('지금 고쳐야 하는 것'));
+  assert.ok(html.includes('쉬운 설명'));
+});
+
+test('triage: 규칙 단위 일괄 처분, 이미 정한 처분은 덮어쓰지 않고, NoActionNow 근거 없으면 저장 안 함', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { run } = await import('../src/cli.js');
+  const dir = mkdtempSync(`${tmpdir()}/pef-t-`);
+  const p = `${dir}/r.json`;
+  writeFileSync(p, JSON.stringify(result({ findings: [finding({ id: 'A', ruleId: 'C-02', line: 1 }), finding({ id: 'B', ruleId: 'C-02', line: 2, disposition: 'ActNow' }), finding({ id: 'C', ruleId: 'SE-01', line: 3 })] })));
+  const quiet = console.log; console.log = () => {}; const qe = console.error; console.error = () => {};
+  try {
+    assert.equal(run(['triage', p, '--rule', 'C-02', '--disposition', 'Plan', '--reason', '정리 예정']), 0);
+    const r = JSON.parse(readFileSync(p, 'utf8'));
+    assert.deepEqual(r.findings.map((f) => f.disposition), ['Plan', 'ActNow', undefined]);
+    assert.equal(run(['triage', p, '--rule', 'SE-01', '--disposition', 'NoActionNow', '--reason', 'x']), 2);
+    assert.equal(JSON.parse(readFileSync(p, 'utf8')).findings[2].disposition, undefined);
+  } finally { console.log = quiet; console.error = qe; }
+});

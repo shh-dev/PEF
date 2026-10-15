@@ -15,3 +15,6 @@
 - Finding `disposition`(ActNow/Plan/NoActionNow/NeedsCheck) 추가. NoActionNow는 이유·확인한 근거·다시 볼 조건 필수(없으면 validate 실패)
 - 보고서에 완결성(비어 있는 항목·Finding 목록)과 "당장 신경 안 써도 되는 것" 섹션 추가. 미완결이면 "차단 없음"을 말하지 않음
 - OSV 취약점은 Suspected+NeedsCheck로 변경(설치 사실만 알 뿐 사용 여부는 모름)
+
+## 0.3.0
+- `pef triage`(규칙 단위 일괄 처분), `report --html`(사람이 보기 쉬운 단일 HTML 보고서)

@@ -23,6 +23,8 @@ pef audit <대상> --out <대상 밖 폴더>     # 설치된 Knip·Semgrep·OSV-
 # (에이전트가 체크리스트 나머지를 수동 점검해 result.schema.json 형식의 파일을 추가로 만든다)
 pef validate <result.json...>            # 형식 검사
 pef report <result.json...> --out <폴더> # 합치기 → 점수 → report.md (--json 이면 score.json)
+pef triage <result.json> --rule C-02 --disposition Plan --reason "..."   # 규칙 단위 일괄 처분 (NoActionNow 는 --evidence/--recheck 필수)
+pef report <result.json...> --out <폴더> --html     # 사람이 보기 쉬운 report.html 추가
 pef baseline <result.json...> --out <기준선.json>   # 개선 전 기준선
 pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regressed/Inconclusive
 ```

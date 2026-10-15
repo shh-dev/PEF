@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { mergeResults } from './merge.js';
 import { score } from './score.js';
 import { renderReport } from './report.js';
+import { renderHtml } from './html.js';
 import { discover } from './discover.js';
 import { runAdapters, ADAPTERS } from './adapters.js';
 import { validateResult } from './schema.js';
@@ -17,6 +18,9 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
   pef validate <result.json...>              결과 파일이 스키마에 맞는지 검사
   pef report <result.json...> [--out 폴더] [--json]
                                              합치기 → 점수 → report.md (+ score.json)
+  (report 에 --html 을 더하면 사람이 보기 쉬운 report.html 도 만든다)
+  pef triage <result.json> --rule ID --disposition ActNow|Plan|NoActionNow --reason "이유" [--severity P3] [--source 도구] [--evidence "근거" --recheck "조건"]
+                                             규칙 단위로 처분 일괄 지정 (NoActionNow 는 근거·다시 볼 조건 필수)
   pef baseline <result.json...> --out 파일   현재 점수를 기준선으로 저장
   pef compare <기준선.json> <result.json...> 기준선과 비교 (같은 범위일 때만 판정)
 
@@ -67,6 +71,8 @@ export function run(argv) {
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--out') flags.out = rest[++i];
     else if (rest[i] === '--json') flags.json = true;
+    else if (rest[i] === '--html') flags.html = true;
+    else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
     else args.push(rest[i]);
   }
   const load = (files) => files.map((f) => ({ name: f, result: readJson(f) }));
@@ -124,10 +130,33 @@ export function run(argv) {
         const out = resolve(flags.out);
         mkdirSync(out, { recursive: true });
         writeFileSync(`${out}/report.md`, md);
+        if (flags.html) writeFileSync(`${out}/report.html`, renderHtml(merged, s));
         if (flags.json) writeFileSync(`${out}/score.json`, JSON.stringify({ score: s, merged }, null, 2));
         console.log(`저장: ${out}/report.md`);
       } else console.log(flags.json ? JSON.stringify(s, null, 2) : md);
       return s.verdict.startsWith('출시') ? 1 : 0;
+    }
+
+    if (cmd === 'triage') {
+      // 규칙 단위 일괄 처분. 아직 처분이 없거나 NeedsCheck 인 Finding 에만 적용한다 (이미 정한 처분은 덮어쓰지 않음).
+      const [file] = args;
+      if (!file || !flags.rule || !flags.disposition) return fail('사용법: pef triage <result.json> --rule <ID> --disposition <ActNow|Plan|NoActionNow> --reason "이유" [--severity P3] [--source 도구] [--evidence "근거" --recheck "조건"]');
+      const r = readJson(file);
+      let n = 0;
+      for (const f of r.findings) {
+        const open = !f.disposition || f.disposition === 'NeedsCheck';
+        if (!open || f.ruleId !== flags.rule || (flags.severity && f.severity !== flags.severity) || (flags.source && f.source !== flags.source)) continue;
+        f.disposition = flags.disposition;
+        f.dispositionReason = flags.reason ?? '';
+        if (flags.evidence) f.dispositionEvidence = flags.evidence;
+        if (flags.recheck) f.recheckWhen = flags.recheck;
+        n++;
+      }
+      const errs = validateResult(r);
+      if (errs.length) return fail(`처분 적용 후 검증 실패 (저장 안 함):\n${errs.slice(0, 5).join('\n')}`);
+      writeFileSync(resolve(file), JSON.stringify(r, null, 2));
+      console.log(`${n}건에 ${flags.disposition} 처분 적용`);
+      return 0;
     }
 
     if (cmd === 'compare') {
