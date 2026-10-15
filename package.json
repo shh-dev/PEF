@@ -1,0 +1,11 @@
+{
+  "name": "pef",
+  "version": "0.1.0",
+  "description": "Product Excellence Framework CLI — 감사 결과 검증·합치기·점수·보고서",
+  "type": "module",
+  "bin": { "pef": "bin/pef.js" },
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test \"test/*.test.js\"" },
+  "license": "UNLICENSED",
+  "private": true
+}
