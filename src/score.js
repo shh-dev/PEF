@@ -1,7 +1,7 @@
 // docs/SCORING.md 구현. 가중치·매핑·감점표는 그 문서와 같은 값이어야 한다.
 import { loadChecklists } from './checklist.js';
 
-export const SCORE_AREAS = [
+const SCORE_AREAS = [
   { name: '기능 완결성', weight: 20, areas: ['4.1'] },
   { name: 'UX/UI 완성도', weight: 20, areas: ['4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.20'] },
   { name: '코드 및 아키텍처', weight: 15, areas: ['4.8', '4.9'] },

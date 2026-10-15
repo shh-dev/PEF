@@ -13,6 +13,25 @@
 
 에이전트는 PEF를 **대상 프로젝트 밖**(예: 임시 폴더 또는 `C:\Dev\PEF`)에 clone/읽기만 하고, 대상 프로젝트 안에 PEF 파일을 섞지 않는다. 산출물(보고서·기준선)은 대상 프로젝트의 `.pef/` 폴더에만 쓴다 (`.gitignore` 여부는 사용자에게 확인).
 
+## 0.5 CLI 사용법 (설치되어 있으면 사용, 없어도 이 문서만으로 진행 가능)
+
+`pef`는 *판단*을 하지 않는다. 도구 실행·점수 계산·결과 합치기·형식 검사·마스킹만 한다. 체크리스트를 읽고 판단하는 일은 에이전트가 한다.
+
+```
+pef discover <대상>                      # 스택·git 상태 (읽기 전용)
+pef audit <대상> --out <대상 밖 폴더>     # 설치된 Knip·Semgrep·OSV-Scanner·Dependency Cruiser 실행 → *_result.json
+# (에이전트가 체크리스트 나머지를 수동 점검해 result.schema.json 형식의 파일을 추가로 만든다)
+pef validate <result.json...>            # 형식 검사
+pef report <result.json...> --out <폴더> # 합치기 → 점수 → report.md (--json 이면 score.json)
+pef baseline <result.json...> --out <기준선.json>   # 개선 전 기준선
+pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regressed/Inconclusive
+```
+
+- 설치: 이 저장소에서 `npm link` (의존성 없음). 외부 도구 4종은 `npm i -g knip dependency-cruiser`, `pip install semgrep`, `winget install Google.OSVScanner`. **도구 설치는 사용자 승인 후.** 없으면 해당 항목은 NotTested로 남고 총점은 신뢰도 낮음으로 표시된다.
+- 도구가 낸 Finding은 정적 분석이라 대부분 `Suspected`다(OSV 취약점·순환참조만 Confirmed). 에이전트가 코드를 읽어 확정/오탐을 판단한 뒤 `verification`을 고쳐서 합친다.
+- `pef audit`는 `--out`을 주지 않으면 대상 안 `.pef/`에 쓴다. 운영 중인 대상이면 `--out`으로 대상 밖 폴더를 지정한다.
+- 총점이 `null`이거나 "검사 부족"이면 안전하다는 뜻이 아니다. 에이전트의 수동 점검을 더해 커버리지를 올린 뒤 해석한다.
+
 ## 1. 절대 규칙 (SPEC §1·§19 요약)
 
 1. **1단계는 읽기 전용.** 승인 전 원본 코드·데이터·운영 설정 수정 금지.

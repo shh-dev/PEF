@@ -21,7 +21,7 @@ function available(cmd) {
   return null;
 }
 
-function runTool(cmd, args, cwd) {
+function runTool(cmd, args, cwd, emptyStatus) {
   // 명령·인자는 이 파일의 상수뿐이라 셸 문자열로 합쳐도 안전하다 (Windows .cmd 실행 때문에 셸 필요).
   const line = [cmd, ...args].map((a) => (/^[\w.:=/\\-]+$/.test(a) ? a : `"${a}"`)).join(' ');
   try {
@@ -29,6 +29,7 @@ function runTool(cmd, args, cwd) {
   } catch (e) {
     // 많은 도구가 "문제 발견" 시 0이 아닌 코드로 끝난다. 시간 초과가 아니고 출력이 있으면 결과로 쓴다.
     if (e.stdout && !e.killed) return e.stdout;
+    if (e.status === emptyStatus) return "{}"; // 예: osv-scanner 128 = 검사할 패키지 파일 없음 → 취약점 0건
     throw e;
   }
 }
@@ -144,7 +145,7 @@ export function parseDepcruise(json) {
 export const ADAPTERS = [
   { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
   { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '.'], parse: parseSemgrep, items: [] },
-  { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'] },
+  { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
   { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: ['--output-type', 'json', '--no-config', '.'], parse: parseDepcruise, items: ['AR-02'] },
 ];
 
@@ -166,7 +167,7 @@ export function runAdapters(dir, discovery) {
       continue;
     }
     try {
-      findings.push(...a.parse(runTool(cmd, a.args, dir)));
+      findings.push(...a.parse(runTool(cmd, a.args, dir, a.emptyStatus)));
       toolsUsed.push(a.id);
     } catch (e) {
       notTested.push({ tool: a.id, reason: `실행 실패/타임아웃: ${mask(e.message).split('\n')[0]}` });

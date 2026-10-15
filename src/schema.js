@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const dir = fileURLToPath(new URL('../templates/', import.meta.url));
 const cache = new Map();
 
-export function loadSchema(name) {
+function loadSchema(name) {
   if (!cache.has(name)) cache.set(name, JSON.parse(readFileSync(dir + name, 'utf8')));
   return cache.get(name);
 }
@@ -13,7 +13,7 @@ export function loadSchema(name) {
 const typeOf = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : Number.isInteger(v) ? 'integer' : typeof v);
 
 /** @returns {string[]} 오류 목록 (비어 있으면 통과) */
-export function validate(value, schema, path = '$') {
+function validate(value, schema, path = '$') {
   if (schema.$ref) return validate(value, loadSchema(schema.$ref), path);
   const errors = [];
   if (schema.enum && !schema.enum.includes(value)) errors.push(`${path}: ${JSON.stringify(value)} 는 ${schema.enum.join('|')} 중 하나여야 함`);
