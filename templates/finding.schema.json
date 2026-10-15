@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PEF Finding",
+  "type": "object",
+  "required": ["id", "category", "ruleId", "title", "severity", "verification", "evidence", "fixStatus"],
+  "properties": {
+    "id": { "type": "string" },
+    "projectId": { "type": "string" },
+    "category": { "type": "string", "description": "SPEC §4 영역 번호.이름 예: 4.13 보안" },
+    "subcategory": { "type": "string" },
+    "ruleId": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "severity": { "enum": ["P0", "P1", "P2", "P3", "P4"] },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "verification": { "enum": ["Confirmed", "Suspected", "RequiresManualReview", "FalsePositive", "NotApplicable"] },
+    "filePath": { "type": "string" },
+    "line": { "type": "integer", "minimum": 1 },
+    "evidence": { "type": "string", "description": "시크릿 원본값 금지. 마스킹된 발췌만" },
+    "reproduction": { "type": "string" },
+    "impact": { "type": "string" },
+    "recommendedFix": { "type": "string" },
+    "fixRisk": { "enum": ["Low", "Medium", "High", "Critical"] },
+    "fixStatus": { "enum": ["Open", "Planned", "InProgress", "Fixed", "Verified", "AcceptedRisk", "Reopened"] },
+    "verificationResult": { "enum": ["Improved", "Unchanged", "Regressed", "Inconclusive"] },
+    "firstDetected": { "type": "string", "format": "date-time" },
+    "lastDetected": { "type": "string", "format": "date-time" },
+    "source": { "type": "string", "description": "검사기/도구 이름·버전. 수동 점검이면 manual" }
+  }
+}
