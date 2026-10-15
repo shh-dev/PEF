@@ -43,6 +43,34 @@ SPEC은 7개 가중치만 정의한다. 에이전트마다 점수가 달라지�
 - 커버리지 50~80% → 신뢰도 `중간`, 80% 이상 → `높음`.
 - 총점은 항상 `점수 (커버리지 %, 신뢰도)`로 같이 쓴다. 예: `72점 (커버리지 64%, 중간)`.
 
+### 4-1. 판정 값과 커버리지 계산 (시험 보정)
+
+체크리스트 항목마다 아래 **판정 값** 하나를 기록한다 (`coverage` 맵, 형식은 `templates/result.schema.json`).
+
+| 판정 값 | 의미 | 커버리지 | 감점 |
+|---|---|---|---|
+| Clean | 확인했고 문제 없음 | 검사됨 | – |
+| Confirmed | 문제 확정 (Finding 필수) | 검사됨 | 표대로 |
+| Suspected | 문제 의심 (Finding 필수) | 검사됨 | 표의 Suspected 열 |
+| RequiresManualReview | 사람 판단/실측 필요 | 미검사 | 없음 |
+| NotTested | 도구·실행·접속 부재로 못 봄 | 미검사 | 없음 |
+| NotApplicable | 앱 성격상 해당 없음 (사유 필수) | 분모에서 제외 | 없음 |
+
+- 커버리지 = (Clean+Confirmed+Suspected) / (전체 항목 − NotApplicable).
+- Finding의 `verification` 값(Confirmed/Suspected/RequiresManualReview/FalsePositive/NotApplicable)과 위 판정 값은 같은 이름이면 같은 뜻이다. Finding이 없는 항목은 Clean/NotTested/NotApplicable뿐이다.
+- 한 문제가 항목 2개 이상에 걸치면 Finding은 하나로 합치고(`ruleIds`에 모두 기재), 나머지 항목의 판정은 같은 값으로 두되 `coverageNotes`에 "→ <Finding id>"를 적는다. 감점은 한 번만.
+- **정적 판정 신뢰도:** 코드를 읽어 원인이 직접 보이면 Confirmed(`needsLiveCheck:false`). 코드상 문제가 보이지만 라이브 DB/서버/설정에 따라 달라지면 Confirmed가 아니라 Suspected 또는 `needsLiveCheck:true`로 표시한다. 도구 없이 grep으로 어림잡은 결과는 Suspected(신뢰도 낮음).
+- **기본 심각도 조정:** 체크리스트의 기본 심각도는 출발점이다. 올리거나 내리면 Finding에 `severityAdjustment: {from, reason}`을 반드시 남긴다. 사유 없는 조정은 무효.
+- **데이터 유실 P0 기준:** "복구 수단이 없는 상태에서 실제 사용자 데이터가 소실될 수 있는 경로가 코드로 확인됨"이면 P0. 백업 부재처럼 *소실 사건이 아직 없는 위험*은 P1, 소실이 이미 발생했거나 즉시 발생 가능하면 P0.
+
+### 4-2. 약한 영역 경고 (평균이 가리는 문제 방지)
+
+총점은 영역 평균이라 한 영역이 매우 나빠도 가려질 수 있다. 보고서 요약에는 총점과 함께 **영역별 최저 점수**를 반드시 쓰고, 점수 영역 안의 *세부 영역*(4.x) 점수가 50 미만이면 `취약 영역`으로 따로 경고한다.
+
+### 4-3. 병렬 분담 감사 합치기
+
+감사를 여러 에이전트가 나눠 한 경우: ① 같은 파일·같은 원인의 Finding은 합치고 ② 영역 번호(`category`)는 `4.x 이름` 형식으로 통일 ③ 판정 맵을 합칠 때 같은 항목에 서로 다른 판정이 오면 더 심각한 쪽을 택하되 `coverageNotes`에 기록 ④ 총점은 합친 뒤 한 번만 계산.
+
 ## 5. 출시 차단 (점수와 무관)
 
 다음 중 하나라도 있으면 점수와 상관없이 `출시 차단`:

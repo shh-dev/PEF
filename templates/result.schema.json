@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PEF Result (한 번의 감사 또는 분담 단위의 결과 파일)",
+  "type": "object",
+  "required": ["meta", "findings", "coverage"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["target", "commit", "profile", "auditedAt", "scope"],
+      "properties": {
+        "target": { "type": "string" },
+        "commit": { "type": "string", "description": "커밋 해시 + 작업트리 변경 여부, 원격 대비 뒤처진 수" },
+        "profile": { "type": "string", "description": "앱 유형/운영 여부/핵심 목표/가중치 변경 내역" },
+        "auditedAt": { "type": "string", "description": "KST ISO 8601 (+09:00)" },
+        "scope": { "type": "array", "items": { "type": "string" }, "description": "담당한 체크리스트 파일" },
+        "toolsUsed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "finding.schema.json" } },
+    "coverage": {
+      "type": "object",
+      "description": "체크리스트 항목ID → 판정 값",
+      "additionalProperties": { "enum": ["Clean", "Confirmed", "Suspected", "RequiresManualReview", "NotTested", "NotApplicable"] }
+    },
+    "coverageNotes": {
+      "type": "object",
+      "description": "항목ID → 한 줄 메모 (다른 Finding으로 합친 경우 '→ F-001', NotApplicable 사유, NotTested 이유)",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}
