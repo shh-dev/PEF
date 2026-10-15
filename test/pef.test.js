@@ -8,6 +8,10 @@ import { loadChecklists } from '../src/checklist.js';
 import { kstStamp } from '../src/time.js';
 import { parseKnip, parseSemgrep, parseOsv, parseDepcruise } from '../src/adapters.js';
 import { buildAuditResult } from '../src/cli.js';
+import { discover } from '../src/discover.js';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const finding = (o = {}) => ({ id: 'F-1', category: '4.13 보안', ruleId: 'SE-01', title: 't', severity: 'P1', verification: 'Confirmed', evidence: 'e', fixStatus: 'Open', filePath: 'a.js', line: 1, ...o });
 const result = (o = {}) => ({ meta: { target: 'x', commit: 'abc', profile: 'p', auditedAt: '2026-10-15T18:00:00+09:00', scope: ['13-security.md'] }, findings: [], coverage: {}, ...o });
@@ -155,4 +159,40 @@ test('triage: 규칙 단위 일괄 처분, 이미 정한 처분은 덮어쓰지 
     assert.equal(run(['triage', p, '--rule', 'SE-01', '--disposition', 'NoActionNow', '--reason', 'x']), 2);
     assert.equal(JSON.parse(readFileSync(p, 'utf8')).findings[2].disposition, undefined);
   } finally { console.log = quiet; console.error = qe; }
+});
+
+test('탐색: 루트에 패키지 파일이 없는 앱 모음 저장소도 하위 앱을 찾는다', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pef-apps-'));
+  const put = (p, body = '') => {
+    mkdirSync(join(root, p, '..'), { recursive: true });
+    writeFileSync(join(root, p), body);
+  };
+  put('web/package.json', JSON.stringify({ dependencies: { next: '1' } }));
+  put('web/tsconfig.json', '{}');
+  put('web/node_modules/x/package.json', '{}');
+  put('shared/gate/src/package.json', '{}');
+  put('bot/main.py');
+  put('.hidden/package.json', '{}');
+  put('docs/readme.md');
+  const d = discover(root);
+  assert.deepEqual(d.apps.map((a) => a.path).sort(), ['bot', 'shared/gate/src', 'web']);
+  assert.deepEqual(d.stack.sort(), ['node', 'python', 'typescript']);
+  assert.ok(d.frameworks.includes('next'));
+  assert.equal(d.supportLevel, 'Detection Only');
+});
+
+test('탐색: 단일 앱이면 하위 폴더를 훑지 않는다', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pef-one-'));
+  writeFileSync(join(root, 'package.json'), '{}');
+  mkdirSync(join(root, 'sub'));
+  writeFileSync(join(root, 'sub/package.json'), '{}');
+  assert.deepEqual(discover(root).apps, []);
+});
+
+test('audit: 앱 일부에서만 도구가 돌았으면 Clean 이 아니라 NotTested', () => {
+  const disc = { stack: ['node'], supportLevel: 'Detection Only', apps: [{ path: 'a' }, { path: 'b' }], git: null };
+  const r = buildAuditResult('C:/x', disc, { findings: [], toolsUsed: ['knip'], notTested: [{ tool: 'knip', reason: 'b: 실행 실패/타임아웃: x' }] });
+  assert.equal(r.coverage['C-02'], 'NotTested');
+  assert.match(r.coverageNotes['C-02'], /일부만 검사됨/);
+  assert.match(r.meta.profile, /앱 2개: a, b/);
 });

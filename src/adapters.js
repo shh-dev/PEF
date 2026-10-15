@@ -158,10 +158,11 @@ function depcruiseArgs() {
 // ── 어댑터 목록 ──────────────────────────────────────────────────────────────
 
 export const ADAPTERS = [
-  { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
+  // perApp: 앱 여러 개 모음 저장소(discover 의 apps)면 앱 폴더마다 따로 돌린다. 나머지는 루트에서 한 번(스스로 하위 폴더를 훑음).
+  { id: 'knip', perApp: true, needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
   { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '.'], parse: parseSemgrep, items: [] },
   { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
-  { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },
+  { id: 'depcruise', perApp: true, needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },
 ];
 
 /**
@@ -172,7 +173,8 @@ export function runAdapters(dir, discovery) {
   const toolsUsed = [];
   const notTested = [];
   for (const a of ADAPTERS) {
-    if (!a.needs(discovery)) {
+    const targets = a.perApp && discovery.apps?.length ? discovery.apps.filter(a.needs) : a.needs(discovery) ? [{ path: '' }] : [];
+    if (!targets.length) {
       notTested.push({ tool: a.id, reason: '이 스택에는 해당 없음' });
       continue;
     }
@@ -181,12 +183,17 @@ export function runAdapters(dir, discovery) {
       notTested.push({ tool: a.id, reason: '도구 미설치 (설치는 사용자 승인 필요)' });
       continue;
     }
-    try {
-      findings.push(...a.parse(runTool(cmd, typeof a.args === 'function' ? a.args() : a.args, dir, a.emptyStatus)));
-      toolsUsed.push(a.id);
-    } catch (e) {
-      notTested.push({ tool: a.id, reason: `실행 실패/타임아웃: ${mask(e.message).split('\n')[0]}` });
+    let ran = false;
+    for (const t of targets) {
+      try {
+        const found = a.parse(runTool(cmd, typeof a.args === 'function' ? a.args() : a.args, join(dir, t.path), a.emptyStatus));
+        findings.push(...(t.path ? found.map((f) => ({ ...f, filePath: f.filePath ? `${t.path}/${f.filePath}` : t.path })) : found));
+        ran = true;
+      } catch (e) {
+        notTested.push({ tool: a.id, reason: `${t.path ? `${t.path}: ` : ''}실행 실패/타임아웃: ${mask(e.message).split('\n')[0]}` });
+      }
     }
+    if (ran) toolsUsed.push(a.id);
   }
   return { findings, toolsUsed, notTested };
 }
