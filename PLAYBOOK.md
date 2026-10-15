@@ -54,7 +54,7 @@
 | 1 | Discover | 언어·프레임워크·패키지매니저·모노레포·빌드·테스트·DB·배포·MCP·환경변수 참조·외부서비스 탐색. 지원 수준(Full/Partial/Detection Only/Unsupported) 표기 | `.pef/profile.md` |
 | 2 | Baseline | 현재 git commit, 테스트/빌드/타입체크 결과(*실행 승인된 것만*), 번들 크기 등 수치 기록 | `.pef/baseline-<YYMMDD-HHMMSS>.json` |
 | 3 | Audit | `checklists/01~20` 파일을 스택·프로파일에 맞게 선별 점검(항목 ID를 Finding `ruleId`로 사용). 모든 결과를 `templates/finding.schema.json` 형식으로 기록(증거: 파일:줄, 규칙, 재현법) | `.pef/findings.json` |
-| 4 | Score | SPEC §6 가중치로 점수 산출. P0/데이터유실 있으면 "출시 차단". 커버리지·신뢰도 별도 표기 | `.pef/report.md` (`templates/report.md` 기반) |
+| 4 | Score | `docs/SCORING.md` 방식으로 점수 산출(SPEC §6 가중치). P0/데이터유실 있으면 "출시 차단". 커버리지·신뢰도 별도 표기 | `.pef/report.md` (`templates/report.md` 기반) |
 | 5 | Plan ✋ | Finding을 위험도(Low/Medium/High/Critical)·영향·순서로 묶어 개선 계획 제시. 사용자가 범위를 고른다 | `.pef/plan.md` |
 | 6 | Fix | 승인된 항목만. 전용 브랜치 `pef/<주제>`. 작업 묶음마다 커밋(한글 메시지). 수정 전 회귀 테스트 확보 | 패치/커밋 |
 | 7 | Verify | 테스트·타입·보안·성능·번들 재측정, 기준선과 비교 → Improved/Unchanged/Regressed/Inconclusive. Regressed면 적용 중단 | 비교표 |
@@ -78,9 +78,10 @@ SPEC §5의 도구(Knip, Semgrep, OSV-Scanner, Dependency Cruiser, Playwright, a
 | 경로 | 용도 |
 |---|---|
 | `docs/SPEC.md` | 마스터 명세 정본 |
+| `docs/SCORING.md` | 점수 계산 방식(영역 매핑·감점표·커버리지·출시 차단) |
 | `docs/ROADMAP.md` | V1~V4 구현 로드맵·작업 분해 |
 | `checklists/` | 20개 영역 점검표 (Audit 단계에서 사용) |
 | `templates/finding.schema.json` | Finding 표준 스키마 |
 | `templates/report.md` | 보고서 템플릿 |
-| `CLAUDE.md` | 이 저장소를 읽는 에이전트용 진입점 |
+| `AGENTS.md` / `CLAUDE.md` | 이 저장소를 읽는 에이전트용 진입점(Codex / Claude) |
 

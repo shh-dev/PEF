@@ -20,6 +20,7 @@ Codex·Claude 등 어떤 에이전트든 `AGENTS.md`(또는 `CLAUDE.md`)를 진�
 |---|---|
 | `PLAYBOOK.md` | 실행 절차 (여기부터) |
 | `docs/SPEC.md` | 마스터 명세 정본 |
+| `docs/SCORING.md` | 점수 계산 방식 |
 | `docs/ROADMAP.md` | V1~V4 로드맵 |
 | `checklists/` | 영역별 점검표 |
 | `templates/` | Finding 스키마, 보고서 템플릿 |
