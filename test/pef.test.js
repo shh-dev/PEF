@@ -291,3 +291,13 @@ test('영수증: 실시간 확인 출력 파서 (wrangler whoami, supabase proje
   const s = parseSupabaseProjects('  LINKED | ORG ID | REFERENCE ID | NAME | REGION | CREATED AT\n  ● | org123 | abcdefghijklmnopqrst | My Proj | Northeast Asia (Seoul) | 2026-06-28 00:00:00');
   assert.deepEqual(s.map((p) => [p.ref, p.name]), [['abcdefghijklmnopqrst', 'My Proj']]);
 });
+
+test('PEF 기준 지문: 버전·항목 지문이 같으면 안내 없음, 다르면 안내', async () => {
+  const { stamp, changedNote } = await import('../src/version.js');
+  const now = stamp();
+  assert.match(now.rules, /^[0-9a-f]{8}$/);
+  assert.equal(changedNote(null), null);
+  assert.equal(changedNote({ ...now }), null);
+  assert.ok(changedNote({ pef: '0.0.1', rules: 'deadbeef' }).includes('기준이 바뀌었습니다'));
+  assert.ok(changedNote({}).includes('버전이 없습니다')); // 버전 기록이 없던 옛 기록
+});

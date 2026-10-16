@@ -12,11 +12,13 @@ import { runAdapters, ADAPTERS } from './adapters.js';
 import { validateResult } from './schema.js';
 import { mask } from './mask.js';
 import { kst, kstStamp } from './time.js';
+import { stamp, changedNote, update } from './version.js';
 
 const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, 대상 프로젝트 코드를 수정하지 않음)
 
 사용법:
-  pef discover [폴더]                        스택·git 상태 탐색 (JSON)
+  pef update                                 PEF 자신을 원격 최신으로 갱신 (fast-forward만). 이어 쓰던 프로젝트는 갱신 뒤 pef checkpoint 한 번으로 새 기준 적용
+  pef discover [폴더]                      스택·git 상태 탐색 (JSON)
   pef audit [폴더] [--out 폴더]              설치된 검사 도구를 돌려 result 파일 생성 (기본 출력: <폴더>/.pef)
   pef receipt [폴더] [--out 폴더]            앱 영수증: 연결된 Cloudflare·Supabase·MCP·외부 서비스·환경변수 이름을 한 장으로 (값은 읽지 않음). --live 를 더하면 로그인된 wrangler/supabase CLI에 계정을 물어봄(읽기 전용, 승인 후)
   pef profile <유형> --out <.pef>             사용자가 확인한 앱 유형 저장 (방향·가중치·해당 없음 영역 결정). discover 가 유형을 추정해 줌
@@ -115,6 +117,12 @@ export function run(argv) {
     if (!cmd || cmd === 'help' || cmd === '--help') {
       console.log(HELP);
       return 0;
+    }
+
+    if (cmd === 'update') {
+      const r = update();
+      console.log(r.msg);
+      return r.ok ? 0 : 1;
     }
 
     if (cmd === 'discover') {
@@ -258,6 +266,7 @@ export function run(argv) {
         groups: s.groups.map((g) => ({ name: g.name, score: g.score, coverage: g.coverage })),
         counts: s.counts,
         newlyFixed,
+        ...stamp(),
       };
       const prev = history.at(-1);
       history.push(entry);
@@ -266,6 +275,8 @@ export function run(argv) {
       writeFileSync(`${out}/report.md`, renderReport(merged, s, new Date(), profile));
       writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history, profile));
       console.log(progressText(prev, entry, s));
+      const note = changedNote(prev);
+      if (note) console.log(`\n⚠ ${note}`);
       console.log(`\n저장: ${out} (current.json, history.json, report.html)`);
       return s.verdict.startsWith('출시') ? 1 : 0;
     }
@@ -278,6 +289,8 @@ export function run(argv) {
       const merged = readJson(`${out}/current.json`);
       const s = score(merged, profileOf(out));
       console.log(progressText(history.at(-2), history.at(-1), s));
+      const note = changedNote(history.at(-1));
+      if (note) console.log(`\n⚠ ${note}\n  → pef checkpoint --out ${args[0] ?? '.pef'} --note "PEF 갱신 반영" 한 번으로 새 기준을 적용하세요`);
       console.log('\n지금까지의 기록');
       history.forEach((e, i) => console.log(`  ${String(i + 1).padStart(2, '0')}. ${e.at}  ${e.total ?? '-'}점  ${e.note || ''}`));
       return 0;
