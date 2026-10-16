@@ -117,6 +117,8 @@ pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regr
 
 SPEC §5의 도구(Knip, Semgrep, OSV-Scanner, Dependency Cruiser, Playwright, axe-core, Lighthouse CI)는 **이미 설치되어 있거나 사용자가 설치를 승인한 경우에만** 쓴다. 없으면 해당 영역을 "도구 없음 → 수동/정적 점검만"으로 표기하고 통과 처리하지 않는다. 같은 문제를 여러 도구가 찾으면 중복 제거 후 하나의 Finding으로 합친다.
 
+UI 영역(4.2~4.7, 4.20)에서 "왜 이게 문제인지" 근거가 필요하면 `docs/UI-REFERENCES.md`를 본다. 점검 항목이 아니라 참고 자료이며, 사이트를 못 열면 건너뛰고 근거 없이 단정하지 않는다. 스크린샷 복제 금지, 반복 패턴만 근거로 삼는다.
+
 ## 4. 보고 형식
 
 - **사용자 대상 보고는 기본 ELI5**(어린이에게 설명하듯 쉽게). 전문용어는 꼭 필요할 때만 쓰고, 쓰면 바로 쉬운 뜻을 붙인다. 기술 상세는 사용자가 요청할 때만, 또는 `.pef/report.md` 부록에 둔다.

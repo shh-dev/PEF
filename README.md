@@ -27,5 +27,6 @@ Codex·Claude 등 어떤 에이전트든 `AGENTS.md`(또는 `CLAUDE.md`)를 진�
 | `docs/SPEC.md` | 마스터 명세 정본 |
 | `docs/SCORING.md` | 점수 계산 방식 |
 | `docs/ROADMAP.md` | V1~V4 로드맵 |
+| `docs/UI-REFERENCES.md` | UI/UX 판단 근거를 찾는 참고 사이트 (점검 항목 아님) |
 | `checklists/` | 영역별 점검표 |
 | `templates/` | Finding 스키마, 보고서 템플릿 |
