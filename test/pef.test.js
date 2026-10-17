@@ -301,3 +301,15 @@ test('PEF 기준 지문: 버전·항목 지문이 같으면 안내 없음, 다�
   assert.ok(changedNote({ pef: '0.0.1', rules: 'deadbeef' }).includes('기준이 바뀌었습니다'));
   assert.ok(changedNote({}).includes('버전이 없습니다')); // 버전 기록이 없던 옛 기록
 });
+
+test('작업 계획: 파트별 남은 일 계산, 다 끝나면 done', async () => {
+  const { buildPlan } = await import('../src/plan.js');
+  const open = buildPlan(result({ findings: [finding({ disposition: 'ActNow' })], coverage: all('Clean') }));
+  const sec = open.parts.find((p) => p.name === '보안 및 개인정보');
+  assert.equal(sec.actNow, 1);
+  assert.equal(open.done, false);
+  const none = buildPlan(result({ coverage: all('Clean') }));
+  assert.equal(none.done, true);
+  const untested = buildPlan(result({ coverage: {} }));
+  assert.ok(untested.parts.every((p) => p.unjudged > 0) && !untested.done);
+});

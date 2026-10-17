@@ -13,11 +13,13 @@ import { validateResult } from './schema.js';
 import { mask } from './mask.js';
 import { kst, kstStamp } from './time.js';
 import { stamp, changedNote, update } from './version.js';
+import { buildPlan, renderPlan } from './plan.js';
 
 const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, 대상 프로젝트 코드를 수정하지 않음)
 
 사용법:
-  pef update                                 PEF 자신을 원격 최신으로 갱신 (fast-forward만). 이어 쓰던 프로젝트는 갱신 뒤 pef checkpoint 한 번으로 새 기준 적용
+  pef plan [.pef 폴더]                       파트별 해야 할 일 계획표 (처음 부르면 1차 작성 시각 기록, 이후엔 남은 일을 다시 계산)
+  pef update                               PEF 자신을 원격 최신으로 갱신 (fast-forward만). 이어 쓰던 프로젝트는 갱신 뒤 pef checkpoint 한 번으로 새 기준 적용
   pef discover [폴더]                      스택·git 상태 탐색 (JSON)
   pef audit [폴더] [--out 폴더]              설치된 검사 도구를 돌려 result 파일 생성 (기본 출력: <폴더>/.pef)
   pef receipt [폴더] [--out 폴더]            앱 영수증: 연결된 Cloudflare·Supabase·MCP·외부 서비스·환경변수 이름을 한 장으로 (값은 읽지 않음). --live 를 더하면 로그인된 wrangler/supabase CLI에 계정을 물어봄(읽기 전용, 승인 후)
@@ -116,6 +118,18 @@ export function run(argv) {
   try {
     if (!cmd || cmd === 'help' || cmd === '--help') {
       console.log(HELP);
+      return 0;
+    }
+
+    if (cmd === 'plan') {
+      // 고도화를 시작하면 먼저 부르는 명령: 파트별 해야 할 일을 계산해 계획표로 보여 준다. 최초 작성 시각은 plan.json 에 남긴다.
+      const out = resolve(args[0] ?? '.pef');
+      if (!existsSync(`${out}/current.json`)) return fail(`${out}/current.json 이 없습니다 — pef audit 후 pef checkpoint 를 먼저 하세요`);
+      const planFile = `${out}/plan.json`;
+      const first = existsSync(planFile) ? readJson(planFile).firstDraftAt : kst();
+      if (!existsSync(planFile)) writeFileSync(planFile, JSON.stringify({ firstDraftAt: first }, null, 2));
+      const plan = buildPlan(readJson(`${out}/current.json`), profileOf(out));
+      console.log(renderPlan(plan, first));
       return 0;
     }
 
