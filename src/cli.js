@@ -12,7 +12,7 @@ import { runAdapters, ADAPTERS } from './adapters.js';
 import { validateResult } from './schema.js';
 import { mask } from './mask.js';
 import { kst, kstStamp } from './time.js';
-import { stamp, changedNote, update } from './version.js';
+import { stamp, changedNote, update, checkFormat, FORMAT } from './version.js';
 import { buildPlan, renderPlan } from './plan.js';
 import { auditWeb } from './web.js';
 
@@ -283,7 +283,7 @@ export function run(argv) {
       const cur = `${out}/current.json`;
       const histFile = `${out}/history.json`;
       const history = existsSync(histFile) ? readJson(histFile) : [];
-      const prior = existsSync(cur) ? readJson(cur) : null;
+      const prior = existsSync(cur) ? checkFormat(readJson(cur), cur) : null;
       let merged;
       let newlyFixed = 0;
       if (args.length) {
@@ -316,7 +316,7 @@ export function run(argv) {
       // 같은 상태로 다시 마감해도 기록이 불어나지 않게 한다 (더블 실행·재시도 안전)
       const same = prev && JSON.stringify({ ...prev, at: 0 }) === JSON.stringify({ ...entry, at: 0 });
       if (!same) history.push(entry);
-      writeJson(cur, merged);
+      writeJson(cur, { schemaVersion: FORMAT, ...merged });
       writeJson(histFile, history);
       writeFileSync(`${out}/report.md`, renderReport(merged, s, new Date(), profile));
       writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history, profile));
@@ -332,7 +332,7 @@ export function run(argv) {
       const out = resolve(args[0] ?? '.pef');
       if (!existsSync(`${out}/history.json`)) return fail(`${out} 에 기록이 없습니다 — 처음부터 시작하세요 (pef audit)`);
       const history = readJson(`${out}/history.json`);
-      const merged = readJson(`${out}/current.json`);
+      const merged = checkFormat(readJson(`${out}/current.json`), `${out}/current.json`);
       const s = score(merged, profileOf(out));
       console.log(progressText(history.at(-2), history.at(-1), s));
       const note = changedNote(history.at(-1));

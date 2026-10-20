@@ -15,7 +15,14 @@ export function rulesHash() {
   return createHash('sha256').update(ids).digest('hex').slice(0, 8);
 }
 
-export const stamp = () => ({ pef: pefVersion(), rules: rulesHash() });
+/** 기록 파일(current/history)의 형식 번호. 형식이 바뀌면 올리고, 더 높은 번호의 기록은 읽지 않는다. 번호가 없는 옛 기록은 0 으로 본다. */
+export const FORMAT = 1;
+export const checkFormat = (data, file) => {
+  if ((data?.schemaVersion ?? 0) > FORMAT) throw new Error(`${file}: 더 새로운 PEF 가 만든 기록입니다(형식 ${data.schemaVersion}, 이 PEF 는 ${FORMAT}). pef update 로 갱신하세요`);
+  return data;
+};
+
+export const stamp = () => ({ pef: pefVersion(), rules: rulesHash(), format: FORMAT });
 
 /** 이전 기록과 지금의 PEF 기준이 다르면 안내 문장을, 같거나 기록이 없으면 null */
 export function changedNote(prev) {

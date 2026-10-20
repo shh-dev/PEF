@@ -414,3 +414,50 @@ test('Fixed/Verified 는 확인한 근거(fixEvidence)가 있어야 한다', () 
   const good = result({ findings: [finding({ fixStatus: 'Fixed', fixEvidence: '테스트 추가 후 통과' })], coverage: {} });
   assert.equal(validateResult(good).length, 0);
 });
+
+test('discover: git 없는 폴더·있는 폴더, .env 는 이름만', async () => {
+  const { discover } = await import('../src/discover.js');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { execFileSync } = await import('node:child_process');
+  const d = mkdtempSync(`${tmpdir()}/pef-d-`);
+  writeFileSync(`${d}/package.json`, JSON.stringify({ name: 'x', dependencies: { next: '1' }, scripts: { test: 'node t' } }));
+  writeFileSync(`${d}/.env.local`, 'SECRET_TOKEN=do-not-read-me');
+  const a = discover(d);
+  assert.ok(a.stack.includes('node'));
+  assert.equal(a.git, null);
+  assert.ok(a.envFiles.includes('.env.local'));
+  assert.ok(!JSON.stringify(a).includes('do-not-read-me'));
+  assert.deepEqual(a.tests, []); // 테스트 폴더가 아직 없음
+  const git = (...x) => execFileSync('git', ['-C', d, ...x], { stdio: 'ignore' });
+  git('init', '-q');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'add', 'package.json');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'init');
+  const b = discover(d);
+  assert.match(b.git.commit, /^[0-9a-f]{7,}/);
+  assert.equal(b.git.uncommittedChanges, 1); // .env.local 은 추적 안 됨
+});
+
+test('기록 형식 번호: 현재 형식은 저장되고, 더 새로운 형식은 읽기를 거부한다', async () => {
+  const { run } = await import('../src/cli.js');
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const d = mkdtempSync(`${tmpdir()}/pef-f-`);
+  writeFileSync(`${d}/r.json`, JSON.stringify(result({ coverage: all('Clean') })));
+  const log = console.log;
+  const err = console.error;
+  const seen = [];
+  console.log = () => {};
+  console.error = (m) => seen.push(m);
+  try {
+    assert.equal(run(['checkpoint', `${d}/r.json`, '--out', `${d}/o`, '--note', 'a']), 0);
+    const cur = JSON.parse(readFileSync(`${d}/o/current.json`, 'utf8'));
+    assert.equal(cur.schemaVersion, 1);
+    writeFileSync(`${d}/o/current.json`, JSON.stringify({ ...cur, schemaVersion: 99 }));
+    assert.equal(run(['status', `${d}/o`]), 2);
+  } finally {
+    console.log = log;
+    console.error = err;
+  }
+  assert.ok(seen.join('').includes('더 새로운 PEF'));
+});
