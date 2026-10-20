@@ -14,10 +14,12 @@ import { mask } from './mask.js';
 import { kst, kstStamp } from './time.js';
 import { stamp, changedNote, update } from './version.js';
 import { buildPlan, renderPlan } from './plan.js';
+import { auditWeb } from './web.js';
 
 const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, 대상 프로젝트 코드를 수정하지 않음)
 
 사용법:
+  pef web <주소> [--out 폴더]                실행 중인 사이트 점검: Lighthouse(접근성·성능) + 보안 헤더·쿠키 속성. 사용자가 준 주소에만 요청
   pef plan [.pef 폴더]                       파트별 해야 할 일 계획표 (처음 부르면 1차 작성 시각 기록, 이후엔 남은 일을 다시 계산)
   pef update                               PEF 자신을 원격 최신으로 갱신 (fast-forward만). 이어 쓰던 프로젝트는 갱신 뒤 pef checkpoint 한 번으로 새 기준 적용
   pef discover [폴더]                      스택·git 상태 탐색 (JSON)
@@ -119,6 +121,22 @@ export function run(argv) {
     if (!cmd || cmd === 'help' || cmd === '--help') {
       console.log(HELP);
       return 0;
+    }
+
+    if (cmd === 'web') {
+      // 실행 중인 사이트 점검: 사용자가 준 주소에만 요청한다 (Lighthouse 접근성·성능 + 보안 헤더·쿠키 속성)
+      if (!args[0]) return fail('사용법: pef web <http(s)://주소> [--out 폴더]');
+      return auditWeb(args[0]).then(
+        (r) => {
+          const out = resolve(flags.out ?? '.pef');
+          mkdirSync(out, { recursive: true });
+          const file = `${out}/${kstStamp()}_web_result.json`;
+          writeFileSync(file, JSON.stringify(r, null, 2));
+          console.log(`저장: ${file}\n실행한 도구: ${r.meta.toolsUsed.join(', ') || '없음'}\nFinding ${r.findings.length}건`);
+          return 0;
+        },
+        (e) => fail(e.message),
+      );
     }
 
     if (cmd === 'plan') {

@@ -345,3 +345,13 @@ test('디자인 값 세기: 자바스크립트 스타일·Tailwind 값도 센다
   assert.deepEqual([...acc.spaces.keys()].sort(), ['10px', '7px']); // p-4 는 격자라 세지 않음
   assert.deepEqual([...acc.radii.keys()].sort(), ['6px', '9px', 'tw-xl']);
 });
+
+test('사이트 점검: 헤더·쿠키 분석, Lighthouse 파서 (값은 담지 않음)', async () => {
+  const { analyzeHeaders, parseLighthouse } = await import('../src/web.js');
+  const f = analyzeHeaders('https://x.example/', { 'access-control-allow-origin': '*', 'access-control-allow-credentials': 'true' }, ['sid=SECRETVALUE123; Path=/', 'ok=1; HttpOnly; Secure; SameSite=Lax']);
+  assert.deepEqual(f.map((x) => x.ruleId).sort(), ['SE-04', 'SE-12', 'SE-17']);
+  assert.ok(!JSON.stringify(f).includes('SECRETVALUE123'));
+  assert.equal(analyzeHeaders('http://localhost:3000/', { 'content-security-policy': "default-src 'self'; frame-ancestors 'none'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }).length, 0); // http 는 HSTS·Secure 요구 안 함
+  const lh = parseLighthouse(JSON.stringify({ lighthouseVersion: '13', requestedUrl: 'http://l/', categories: { accessibility: { auditRefs: [{ id: 'color-contrast', weight: 3 }, { id: 'image-alt', weight: 10 }] } }, audits: { 'color-contrast': { title: '대비', score: 0, scoreDisplayMode: 'binary', details: { items: [1, 2] } }, 'image-alt': { score: 1 }, 'largest-contentful-paint': { numericValue: 5200, displayValue: '5.2 s' } } }));
+  assert.deepEqual(lh.map((x) => x.ruleId).sort(), ['A-04', 'P-09']);
+});

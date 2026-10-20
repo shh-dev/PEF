@@ -13,7 +13,7 @@ const TIMEOUT_MS = 120_000;
 
 const exe = (name) => (process.platform === 'win32' ? `${name}.cmd` : name);
 
-function available(cmd) {
+export function available(cmd) {
   for (const c of [cmd, exe(cmd)]) {
     try {
       execSync(`${c} --version`, { stdio: 'ignore', timeout: 15_000 });
@@ -25,7 +25,7 @@ function available(cmd) {
   return null;
 }
 
-function runTool(cmd, args, cwd, emptyStatus) {
+export function runTool(cmd, args, cwd, emptyStatus) {
   // 명령·인자는 이 파일의 상수뿐이라 셸 문자열로 합쳐도 안전하다 (Windows .cmd 실행 때문에 셸 필요).
   const line = [cmd, ...args].map((a) => (/^[\w.:=/\\-]+$/.test(a) ? a : `"${a}"`)).join(' ');
   try {
@@ -38,7 +38,7 @@ function runTool(cmd, args, cwd, emptyStatus) {
   }
 }
 
-const finding = (o) => ({
+export const finding = (o) => ({
   category: o.category,
   ruleId: o.ruleId,
   title: mask(o.title),
