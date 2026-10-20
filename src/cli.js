@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mergeResults, continueFrom } from './merge.js';
 import { score } from './score.js';
@@ -40,7 +40,19 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
 
 종료 코드: 0 정상 / 1 출시 차단·보류 또는 회귀 / 2 입력 오류`;
 
-const readJson = (p) => JSON.parse(readFileSync(resolve(p), 'utf8'));
+const readJson = (p) => {
+  try {
+    return JSON.parse(readFileSync(resolve(p), 'utf8'));
+  } catch (e) {
+    // 어느 파일이 왜 안 읽히는지 알려 준다 (JSON.parse 의 위치 정보만으로는 파일을 알 수 없다)
+    throw new Error(`${p}: ${e instanceof SyntaxError ? `JSON 형식이 깨졌습니다 (${e.message})` : e.code === 'ENOENT' ? '파일이 없습니다' : e.message}`);
+  }
+};
+// 기록 파일은 임시 파일에 쓴 뒤 바꿔치기해서, 쓰다 끊겨도 반쪽짜리 파일이 남지 않게 한다
+const writeJson = (file, data) => {
+  writeFileSync(`${file}.tmp`, JSON.stringify(data, null, 2));
+  renameSync(`${file}.tmp`, file);
+};
 const fail = (msg) => {
   console.error(mask(msg));
   return 2;
@@ -259,7 +271,7 @@ export function run(argv) {
       }
       const errs = validateResult(r);
       if (errs.length) return fail(`처분 적용 후 검증 실패 (저장 안 함):\n${errs.slice(0, 5).join('\n')}`);
-      writeFileSync(resolve(file), JSON.stringify(r, null, 2));
+      writeJson(resolve(file), r);
       console.log(`${n}건에 ${flags.disposition} 처분 적용`);
       return 0;
     }
@@ -304,8 +316,8 @@ export function run(argv) {
       // 같은 상태로 다시 마감해도 기록이 불어나지 않게 한다 (더블 실행·재시도 안전)
       const same = prev && JSON.stringify({ ...prev, at: 0 }) === JSON.stringify({ ...entry, at: 0 });
       if (!same) history.push(entry);
-      writeFileSync(cur, JSON.stringify(merged, null, 2));
-      writeFileSync(histFile, JSON.stringify(history, null, 2));
+      writeJson(cur, merged);
+      writeJson(histFile, history);
       writeFileSync(`${out}/report.md`, renderReport(merged, s, new Date(), profile));
       writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), history, profile));
       console.log(progressText(prev, entry, s));

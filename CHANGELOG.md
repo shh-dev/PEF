@@ -31,3 +31,14 @@
 
 ## 0.7.0
 - `pef receipt`: 앱 영수증 — 연결된 Cloudflare·Supabase·배포·외부 서비스·MCP·스킬·환경변수 이름·예약작업·웹훅을 한 장(html/md)으로. 값은 읽지 않고 .env 파일은 열지 않으며 날짜는 git 기록 기준. `--live`는 로그인된 wrangler/supabase CLI에 계정을 읽기 전용으로 확인(옵트인)
+
+## 0.2~0.7 (요약)
+- 0.2~0.3: disposition(처분)·완결성 판정, triage·checkpoint·status, HTML 보고서, 지속 고도화 절차
+- 0.4~0.5: 앱 유형·운영체제 분류(discover/profile), 데스크톱·모바일 전용 항목(DK/MB), 유형별 가중치
+- 0.6: 앱 영수증(`pef receipt`, `--live` 계정 확인)
+- 0.7: `pef update`(+기록에 PEF 버전·기준 지문), `pef plan`(파트별 계획표), UI 참고 자료 문서
+
+## 미배포 변경
+- 디자인 값 세기(V-01~06), gitleaks 어댑터, Semgrep OWASP 규칙, `pef web`(Lighthouse·보안 헤더·쿠키)
+- 수정: checkpoint 중복 마감 시 기록 중복, 돌리지 않은 도구의 Finding 을 해결로 닫던 문제, 오류 메시지에 파일명, 기록 파일 안전 쓰기(임시 파일 후 교체)
+- 시작 전 준비 도구(ponytail·ELI5)·Jev 제안 규칙, GitHub Actions 테스트 워크플로

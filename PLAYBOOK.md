@@ -133,6 +133,8 @@ pef compare <기준선.json> <result.json...>          # Improved/Unchanged/Regr
 
 SPEC §5의 도구(Knip, Semgrep, OSV-Scanner, Dependency Cruiser, Playwright, axe-core, Lighthouse CI)는 **이미 설치되어 있거나 사용자가 설치를 승인한 경우에만** 쓴다. 없으면 해당 영역을 "도구 없음 → 수동/정적 점검만"으로 표기하고 통과 처리하지 않는다. 같은 문제를 여러 도구가 찾으면 중복 제거 후 하나의 Finding으로 합친다.
 
+**외부로 나가는 것(사용자에게 알린다):** Semgrep `--config auto` 는 규칙을 인터넷에서 받고 사용 통계(metrics: 규칙 적중·실행 정보. 소스 코드는 아님)를 보낼 수 있다. 통계를 끄려면 `--metrics=off` 와 명시적 규칙 묶음(`p/owasp-top-ten` 등)을 써야 하며, 이 경우 탐지 건수가 줄어든다(vok 시험: auto 15건 vs 명시 규칙 7건). 민감한 저장소는 사용자가 정한다. OSV-Scanner 는 패키지 이름·버전을 osv.dev 에 조회한다.
+
 UI 영역(4.2~4.7, 4.20)에서 "왜 이게 문제인지" 근거가 필요하면 `docs/UI-REFERENCES.md`를 본다. 점검 항목이 아니라 참고 자료이며, 사이트를 못 열면 건너뛰고 근거 없이 단정하지 않는다. 스크린샷 복제 금지, 반복 패턴만 근거로 삼는다.
 
 ### 3-1. 실행 중인 사이트·DB 점검 (보안·UI 보강)

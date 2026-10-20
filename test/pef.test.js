@@ -388,3 +388,22 @@ test('이어 붙이기: 돌리지 않은 도구의 Finding 은 해결로 처리�
   assert.equal(merged.findings.find((x) => x.id === 'K-1').fixStatus, 'Verified');
   assert.equal(merged.findings.find((x) => x.id === 'S-1').fixStatus, 'Open');
 });
+
+test('오류 메시지: 어느 파일이 왜 안 읽히는지 알려 준다', async () => {
+  const { run } = await import('../src/cli.js');
+  const { writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const bad = `${tmpdir()}/pef-bad.json`;
+  writeFileSync(bad, '{bad');
+  const err = console.error;
+  const seen = [];
+  console.error = (m) => seen.push(m);
+  try {
+    assert.equal(run(['report', bad]), 2);
+    assert.equal(run(['report', `${tmpdir()}/pef-none.json`]), 2);
+  } finally {
+    console.error = err;
+  }
+  assert.ok(seen[0].includes('pef-bad.json') && seen[0].includes('깨졌습니다'));
+  assert.ok(seen[1].includes('파일이 없습니다'));
+});
