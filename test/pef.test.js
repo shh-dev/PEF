@@ -581,3 +581,71 @@ test('기록 형식 번호: 현재 형식은 저장되고, 더 새로운 형식�
   }
   assert.ok(seen.join('').includes('더 새로운 PEF'));
 });
+
+test('휴대폰 손가락 점검: 판정 함수가 스크롤 멈춤·잘림·키보드 가림·팝업 문제를 잡는다', async () => {
+  const { judgePage, judgeFocus, judgeDialog, DEVICES } = await import('../src/touch.js');
+  const dev = DEVICES[0];
+  const ok = {
+    vw: 390,
+    innerW: 390,
+    scrollW: 390,
+    docMax: 800,
+    scrollerMax: 0,
+    bodyOverflowY: 'visible',
+    htmlOverflowY: 'visible',
+    hasViewportMeta: true,
+    clipped: [],
+    clippedCount: 0,
+    small: [],
+    smallCount: 0,
+  };
+  assert.deepEqual(judgePage(ok, { reached: true, y: 800, max: 800 }, dev), []);
+  const bad = {
+    ...ok,
+    scrollW: 600,
+    bodyOverflowY: 'hidden',
+    clippedCount: 1,
+    clipped: [{ label: '저장', tag: 'BUTTON', left: 340, right: 440 }],
+    smallCount: 1,
+    small: [{ label: '.', w: 10, h: 10 }],
+  };
+  const ids = judgePage(bad, { reached: false, y: 0, max: 800 }, dev)
+    .map((x) => x.ruleId)
+    .sort();
+  assert.deepEqual(ids, ['R-02', 'R-06', 'TC-01', 'TC-02']);
+  assert.equal(judgePage({ ...ok, hasViewportMeta: false }, null, dev)[0].ruleId, 'R-02');
+  // 스크롤할 길이가 없으면(내용이 짧음) 멈춤으로 보지 않는다
+  assert.deepEqual(judgePage({ ...ok, docMax: 0 }, null, dev), []);
+  const f = { name: 'memo', top: 700, bottom: 750, vh: 844, zoneTop: 508, inputFixed: true, button: { label: '저장', top: 700, bottom: 750, fixed: true }, canScroll: false };
+  assert.deepEqual(
+    judgeFocus(f, dev, 336).map((x) => x.ruleId),
+    ['TC-03', 'TC-03'],
+  );
+  assert.deepEqual(judgeFocus({ ...f, top: 300, bottom: 350, button: { label: '저장', top: 600, bottom: 650, fixed: false }, canScroll: true }, dev, 336), []);
+  assert.deepEqual(judgeFocus(null, dev, 336), []);
+  const d = { top: 20, bottom: 2022, left: 10, right: 350, vw: 390, vh: 844, tooTall: true, tooWide: false, scrollable: false, hasClose: true, closeInView: false };
+  assert.equal(judgeDialog(d, dev, '자세히 보기').length, 2);
+  assert.deepEqual(judgeDialog({ ...d, scrollable: true, closeInView: true }, dev, 'x'), []);
+});
+
+test('휴대폰 손가락 점검: 일부러 깨뜨린 화면은 잡고 멀쩡한 화면은 통과 (Chrome·playwright-core 있을 때만)', async (t) => {
+  const { auditTouch, DEVICES } = await import('../src/touch.js');
+  const { startServer } = await import('./fixtures/touch-server.mjs');
+  const server = await startServer(0);
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    let r;
+    try {
+      r = await auditTouch(`${base}/good`, { routes: ['/good', '/bad'], devices: [DEVICES[0]] });
+    } catch (e) {
+      if (/playwright-core|Executable|chrome/i.test(e.message)) return t.skip('Chrome/playwright-core 없음');
+      throw e;
+    }
+    const bad = r.findings.filter((f) => f.filePath === '/bad').map((f) => f.ruleId);
+    for (const id of ['R-02', 'TC-01', 'TC-02', 'TC-03', 'R-05', 'R-06']) assert.ok(bad.includes(id), `${id} 를 못 잡음`);
+    assert.equal(r.findings.filter((f) => f.filePath === '/good').length, 0);
+    assert.ok(r.findings.every((f) => f.verification === 'Suspected'));
+  } finally {
+    server.close();
+  }
+});
