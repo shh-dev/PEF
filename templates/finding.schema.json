@@ -159,6 +159,10 @@
         "Reopened"
       ]
     },
+    "fixEvidence": {
+      "type": "string",
+      "description": "fixStatus=Fixed/Verified일 때 무엇으로 확인했는지(재검사 결과, 테스트, 직접 실행 등). 없으면 검증 실패"
+    },
     "acceptedBy": {
       "type": "string",
       "description": "fixStatus=AcceptedRisk일 때 승인한 사람과 일시(KST). 에이전트가 단독으로 AcceptedRisk 처리 금지"

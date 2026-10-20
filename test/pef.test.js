@@ -407,3 +407,10 @@ test('오류 메시지: 어느 파일이 왜 안 읽히는지 알려 준다', as
   assert.ok(seen[0].includes('pef-bad.json') && seen[0].includes('깨졌습니다'));
   assert.ok(seen[1].includes('파일이 없습니다'));
 });
+
+test('Fixed/Verified 는 확인한 근거(fixEvidence)가 있어야 한다', () => {
+  const bad = result({ findings: [finding({ fixStatus: 'Fixed' })], coverage: {} });
+  assert.ok(validateResult(bad).some((e) => e.includes('fixEvidence')));
+  const good = result({ findings: [finding({ fixStatus: 'Fixed', fixEvidence: '테스트 추가 후 통과' })], coverage: {} });
+  assert.equal(validateResult(good).length, 0);
+});

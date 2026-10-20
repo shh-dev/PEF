@@ -70,7 +70,7 @@ export function continueFrom(prior, fresh) {
   const carried = prior.findings.map((f) => {
     const gone = (fresh.meta.toolsUsed ?? []).includes(TOOL_ID[f.source]) && !freshKeys.has(key(f)) && !['Fixed', 'Verified', 'AcceptedRisk'].includes(f.fixStatus);
     if (gone) newlyFixed++;
-    return gone ? { ...f, fixStatus: 'Verified', verificationResult: 'Improved' } : f;
+    return gone ? { ...f, fixStatus: 'Verified', verificationResult: 'Improved', fixEvidence: `재검사에서 ${f.source} 가 더 이상 찾지 못함 (${fresh.meta.auditedAt})` } : f;
   });
   const added = fresh.findings.filter((f) => !priorKeys.has(key(f)));
   const ids = new Set(carried.map((f) => f.id));

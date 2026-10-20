@@ -38,6 +38,8 @@ function validate(value, schema, path = '$') {
 export function validateResult(r) {
   const errors = validate(r, loadSchema('result.schema.json'));
   (r?.findings ?? []).forEach((f, i) => {
+    // 고쳤다고 닫으려면 무엇으로 확인했는지가 있어야 한다 (근거 없이 닫아 점수·완결성을 올리는 것 방지)
+    if ((f?.fixStatus === 'Fixed' || f?.fixStatus === 'Verified') && !f.fixEvidence?.trim()) errors.push(`$.findings[${i}].fixEvidence: ${f.fixStatus} 는 확인한 근거가 필수`);
     if (f?.disposition === 'NoActionNow') {
       for (const k of ['dispositionReason', 'dispositionEvidence', 'recheckWhen']) {
         if (!f[k]?.trim()) errors.push(`$.findings[${i}].${k}: NoActionNow 는 필수 (확인한 근거 없이 무시 불가)`);
