@@ -301,7 +301,9 @@ export function run(argv) {
         ...stamp(),
       };
       const prev = history.at(-1);
-      history.push(entry);
+      // 같은 상태로 다시 마감해도 기록이 불어나지 않게 한다 (더블 실행·재시도 안전)
+      const same = prev && JSON.stringify({ ...prev, at: 0 }) === JSON.stringify({ ...entry, at: 0 });
+      if (!same) history.push(entry);
       writeFileSync(cur, JSON.stringify(merged, null, 2));
       writeFileSync(histFile, JSON.stringify(history, null, 2));
       writeFileSync(`${out}/report.md`, renderReport(merged, s, new Date(), profile));

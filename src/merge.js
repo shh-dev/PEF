@@ -52,7 +52,8 @@ export function mergeResults(inputs) {
   };
 }
 
-const TOOL_SOURCES = new Set(['knip', 'semgrep', 'osv-scanner', 'dependency-cruiser']);
+// Finding 의 source → 그 도구를 돌렸다고 기록되는 toolsUsed 이름. 이번 결과가 그 도구를 *돌린* 경우에만 "사라짐=해결"로 본다.
+const TOOL_ID = { knip: 'knip', semgrep: 'semgrep', 'osv-scanner': 'osv-scanner', 'dependency-cruiser': 'depcruise', gitleaks: 'gitleaks', 'pef-design': 'pef-design' };
 
 /**
  * 이어서 고도화: 이전 상태(prior)에 이번 결과(fresh)를 얹는다.
@@ -67,7 +68,7 @@ export function continueFrom(prior, fresh) {
   let newlyFixed = 0;
 
   const carried = prior.findings.map((f) => {
-    const gone = TOOL_SOURCES.has(f.source) && !freshKeys.has(key(f)) && !['Fixed', 'Verified', 'AcceptedRisk'].includes(f.fixStatus);
+    const gone = (fresh.meta.toolsUsed ?? []).includes(TOOL_ID[f.source]) && !freshKeys.has(key(f)) && !['Fixed', 'Verified', 'AcceptedRisk'].includes(f.fixStatus);
     if (gone) newlyFixed++;
     return gone ? { ...f, fixStatus: 'Verified', verificationResult: 'Improved' } : f;
   });

@@ -166,7 +166,9 @@ test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진
   const base = all('Clean');
   const bad = finding({ id: 'F-001', ruleId: 'SE-11', source: 'osv-scanner', verification: 'Confirmed', severity: 'P1', disposition: 'ActNow', line: null });
   writeFileSync(`${dir}/r1.json`, JSON.stringify(result({ findings: [bad], coverage: { ...base, 'SE-11': 'Confirmed' } })));
-  writeFileSync(`${dir}/r2.json`, JSON.stringify(result({ findings: [], coverage: base })));
+  const r2 = result({ findings: [], coverage: base });
+  r2.meta.toolsUsed = ['osv-scanner']; // 재검사에서 osv-scanner 를 실제로 돌렸다
+  writeFileSync(`${dir}/r2.json`, JSON.stringify(r2));
   const quiet = console.log; const logs = []; console.log = (m) => logs.push(m);
   try {
     assert.equal(run(['checkpoint', `${dir}/r1.json`, '--out', out, '--note', '처음 점검']), 0);
@@ -354,4 +356,35 @@ test('사이트 점검: 헤더·쿠키 분석, Lighthouse 파서 (값은 담지 
   assert.equal(analyzeHeaders('http://localhost:3000/', { 'content-security-policy': "default-src 'self'; frame-ancestors 'none'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }).length, 0); // http 는 HSTS·Secure 요구 안 함
   const lh = parseLighthouse(JSON.stringify({ lighthouseVersion: '13', requestedUrl: 'http://l/', categories: { accessibility: { auditRefs: [{ id: 'color-contrast', weight: 3 }, { id: 'image-alt', weight: 10 }] } }, audits: { 'color-contrast': { title: '대비', score: 0, scoreDisplayMode: 'binary', details: { items: [1, 2] } }, 'image-alt': { score: 1 }, 'largest-contentful-paint': { numericValue: 5200, displayValue: '5.2 s' } } }));
   assert.deepEqual(lh.map((x) => x.ruleId).sort(), ['A-04', 'P-09']);
+});
+
+test('checkpoint: 같은 상태로 두 번 마감해도 기록은 한 번만 쌓인다', async () => {
+  const { run } = await import('../src/cli.js');
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const d = mkdtempSync(`${tmpdir()}/pef-t-`);
+  writeFileSync(`${d}/r.json`, JSON.stringify(result({ coverage: all('Clean') })));
+  const log = console.log;
+  console.log = () => {};
+  try {
+    assert.equal(run(['checkpoint', `${d}/r.json`, '--out', `${d}/o`, '--note', 'a']), 0);
+    assert.equal(run(['checkpoint', '--out', `${d}/o`, '--note', 'a']), 0);
+    assert.equal(run(['checkpoint', '--out', `${d}/o`, '--note', 'b']), 0);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(JSON.parse(readFileSync(`${d}/o/history.json`, 'utf8')).length, 2); // a, b (두 번째 a 는 중복)
+});
+
+test('이어 붙이기: 돌리지 않은 도구의 Finding 은 해결로 처리하지 않는다', async () => {
+  const { continueFrom } = await import('../src/merge.js');
+  const f = (source, id) => finding({ id, source, ruleId: 'C-02', filePath: `${id}.js` });
+  const prior = result({ findings: [f('knip', 'K-1'), f('semgrep', 'S-1')] });
+  prior.meta.toolsUsed = ['knip', 'semgrep'];
+  const fresh = result({ findings: [] });
+  fresh.meta.toolsUsed = ['knip']; // semgrep 은 이번에 안 돌림
+  const { merged, newlyFixed } = continueFrom(prior, fresh);
+  assert.equal(newlyFixed, 1);
+  assert.equal(merged.findings.find((x) => x.id === 'K-1').fixStatus, 'Verified');
+  assert.equal(merged.findings.find((x) => x.id === 'S-1').fixStatus, 'Open');
 });
