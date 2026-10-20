@@ -6,6 +6,6 @@
   "bin": { "pef": "bin/pef.js" },
   "engines": { "node": ">=20" },
   "scripts": { "test": "node --test \"test/*.test.js\"" },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true
 }
