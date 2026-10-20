@@ -20,8 +20,8 @@ export function mergeResults(inputs) {
   const tools = new Set();
 
   for (const { name, result } of inputs) {
-    result.meta.scope.forEach((s) => scope.add(s));
-    (result.meta.toolsUsed ?? []).forEach((t) => tools.add(t));
+    for (const s of result.meta.scope) scope.add(s);
+    for (const t of result.meta.toolsUsed ?? []) tools.add(t);
     for (const f of result.findings) {
       const k = key(f);
       const prev = findings.get(k);
@@ -34,7 +34,7 @@ export function mergeResults(inputs) {
         coverage[id] = worse;
       } else coverage[id] = v;
     }
-    Object.entries(result.coverageNotes ?? {}).forEach(([id, n]) => (coverageNotes[id] = [coverageNotes[id], n].filter(Boolean).join('; ')));
+    for (const [id, n] of Object.entries(result.coverageNotes ?? {})) coverageNotes[id] = [coverageNotes[id], n].filter(Boolean).join('; ');
   }
 
   // 서로 다른 입력의 Finding id 충돌 → 순번으로 재부여
@@ -83,7 +83,12 @@ export function continueFrom(prior, fresh) {
   return {
     newlyFixed,
     merged: {
-      meta: { ...prior.meta, ...fresh.meta, scope: [...new Set([...prior.meta.scope, ...fresh.meta.scope])], toolsUsed: [...new Set([...(prior.meta.toolsUsed ?? []), ...(fresh.meta.toolsUsed ?? [])])] },
+      meta: {
+        ...prior.meta,
+        ...fresh.meta,
+        scope: [...new Set([...prior.meta.scope, ...fresh.meta.scope])],
+        toolsUsed: [...new Set([...(prior.meta.toolsUsed ?? []), ...(fresh.meta.toolsUsed ?? [])])],
+      },
       findings: [...carried, ...added],
       coverage: { ...prior.coverage, ...fresh.coverage },
       coverageNotes: { ...prior.coverageNotes, ...fresh.coverageNotes },

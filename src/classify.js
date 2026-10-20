@@ -1,6 +1,6 @@
 // 앱 유형·대상 운영체제 추정 (파일 존재와 의존성만 본다 — 코드 실행·네트워크 없음).
 // 추정은 틀릴 수 있으므로 항상 근거(evidence)와 신뢰도를 같이 돌려주고, 최종 확정은 사용자 확인 몫이다 (PLAYBOOK §1.5).
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const readText = (p) => {
@@ -82,7 +82,14 @@ export function classify(dir) {
     if (mobile.length || !desk.length) add('mobile', `Flutter(pubspec.yaml) 모바일 폴더: ${mobile.join(', ') || '없음'}`);
     if (desk.length) add('desktop', `Flutter 데스크톱 폴더: ${desk.join(', ')}`);
     if (existsSync(join(dir, 'web'))) add('web', 'Flutter web 폴더');
-    for (const [n, label] of [['android', 'Android'], ['ios', 'iOS'], ['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux']]) if (existsSync(join(dir, n))) platforms.add(label);
+    for (const [n, label] of [
+      ['android', 'Android'],
+      ['ios', 'iOS'],
+      ['windows', 'Windows'],
+      ['macos', 'macOS'],
+      ['linux', 'Linux'],
+    ])
+      if (existsSync(join(dir, n))) platforms.add(label);
   }
   const top = (() => {
     try {

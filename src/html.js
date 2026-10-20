@@ -30,11 +30,7 @@ function group(title, hint, findings, open = false) {
   const byRule = new Map();
   for (const f of sorted) byRule.set(f.ruleId, [...(byRule.get(f.ruleId) ?? []), f]);
   const body = [...byRule.entries()]
-    .map(([rule, fs]) =>
-      fs.length > 8
-        ? `<details><summary>${esc(rule)} — ${fs.length}건 (펼쳐서 보기)</summary><ul>${fs.map(item).join('')}</ul></details>`
-        : `<ul>${fs.map(item).join('')}</ul>`,
-    )
+    .map(([rule, fs]) => (fs.length > 8 ? `<details><summary>${esc(rule)} — ${fs.length}건 (펼쳐서 보기)</summary><ul>${fs.map(item).join('')}</ul></details>` : `<ul>${fs.map(item).join('')}</ul>`))
     .join('');
   return `<section><details ${open ? 'open' : ''}><summary class="sec">${esc(title)} <span class="n">${findings.length}</span></summary><p class="hint">${esc(hint)}</p>${body}</details></section>`;
 }
@@ -53,7 +49,8 @@ export function renderHtml(merged, s, now = new Date(), history = [], profile = 
 
   const rows = s.groups
     .map(
-      (g) => `<tr><td>${esc(g.name)}</td><td>${g.na ? '<span class="dim">해당 없음</span>' : g.insufficient ? '<span class="dim">측정 불충분</span>' : `<div class="bar"><i style="width:${g.score}%"></i></div> <b>${g.score}</b>`}</td><td>${g.coverage}% <span class="dim">(${g.tested}/${g.applicable})</span></td></tr>`,
+      (g) =>
+        `<tr><td>${esc(g.name)}</td><td>${g.na ? '<span class="dim">해당 없음</span>' : g.insufficient ? '<span class="dim">측정 불충분</span>' : `<div class="bar"><i style="width:${g.score}%"></i></div> <b>${g.score}</b>`}</td><td>${g.coverage}% <span class="dim">(${g.tested}/${g.applicable})</span></td></tr>`,
     )
     .join('');
 
@@ -106,7 +103,19 @@ ${group('아직 판단 전인 것', '도구나 점검이 찾았지만 아직 지
 
 ${manual.length ? `<section class="card"><b>사람이 직접 확인할 것</b><p class="hint">코드만으로는 확정할 수 없고 실제 서버·DB·설정을 봐야 하는 것입니다.</p><p>${manual.map(esc).join(', ')}</p></section>` : ''}
 
-${history.length ? `<section class="card"><b>고도화 진행 기록</b><p class="hint">점검할 때마다 쌓이는 기록입니다. 무슨 작업을 해서 점수가 어떻게 바뀌었는지 보여 줍니다.</p><table><tr><th>시각</th><th>점수</th><th>한 일</th></tr>${[...history].reverse().map((e, i, a) => `<tr><td>${esc(e.at)}</td><td>${e.total === null ? '-' : e.total}${a[i + 1] && a[i + 1].total !== null && e.total !== null ? ` <span class="dim">(${e.total - a[i + 1].total >= 0 ? '+' : ''}${e.total - a[i + 1].total})</span>` : ''}</td><td>${esc(e.note || '')}</td></tr>`).join('')}</table></section>` : ''}
+${
+  history.length
+    ? `<section class="card"><b>고도화 진행 기록</b><p class="hint">점검할 때마다 쌓이는 기록입니다. 무슨 작업을 해서 점수가 어떻게 바뀌었는지 보여 줍니다.</p><table><tr><th>시각</th><th>점수</th><th>한 일</th></tr>${[
+        ...history,
+      ]
+        .reverse()
+        .map(
+          (e, i, a) =>
+            `<tr><td>${esc(e.at)}</td><td>${e.total === null ? '-' : e.total}${a[i + 1] && a[i + 1].total !== null && e.total !== null ? ` <span class="dim">(${e.total - a[i + 1].total >= 0 ? '+' : ''}${e.total - a[i + 1].total})</span>` : ''}</td><td>${esc(e.note || '')}</td></tr>`,
+        )
+        .join('')}</table></section>`
+    : ''
+}
 
 <section class="card"><b>영역별 점수</b>
 <table><tr><th>영역</th><th>점수</th><th>본 비율</th></tr>${rows}</table>

@@ -3,9 +3,18 @@
   "version": "0.7.0",
   "description": "Product Excellence Framework CLI — 감사 결과 검증·합치기·점수·보고서",
   "type": "module",
-  "bin": { "pef": "bin/pef.js" },
-  "engines": { "node": ">=20" },
-  "scripts": { "test": "node --test \"test/*.test.js\"" },
+  "bin": {
+    "pef": "bin/pef.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
   "license": "MIT",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15"
+  }
 }

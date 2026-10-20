@@ -1,7 +1,8 @@
 // PEF 자신의 버전과 "점검 기준 지문". 기록에 남겨 두면 기준이 바뀐 뒤의 점수 변화를 앱 탓으로 오해하지 않는다.
-import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadChecklists } from './checklist.js';
 
@@ -11,7 +12,10 @@ export const pefVersion = () => JSON.parse(readFileSync(`${root}package.json`, '
 
 /** 체크리스트 항목 ID 전체의 짧은 지문. 항목이 늘거나 줄면 바뀐다. */
 export function rulesHash() {
-  const ids = [...loadChecklists().values()].flatMap((a) => a.ids).sort().join(',');
+  const ids = [...loadChecklists().values()]
+    .flatMap((a) => a.ids)
+    .sort()
+    .join(',');
   return createHash('sha256').update(ids).digest('hex').slice(0, 8);
 }
 

@@ -4,9 +4,9 @@
 //  - 도구가 실패/타임아웃이면 "통과"가 아니라 NotTested.
 import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { scanDesign, designFindings } from './design.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { designFindings, scanDesign } from './design.js';
 import { mask } from './mask.js';
 
 const TIMEOUT_MS = 120_000;
@@ -33,7 +33,7 @@ export function runTool(cmd, args, cwd, emptyStatus) {
   } catch (e) {
     // 많은 도구가 "문제 발견" 시 0이 아닌 코드로 끝난다. 시간 초과가 아니고 출력이 있으면 결과로 쓴다.
     if (e.stdout && !e.killed) return e.stdout;
-    if (e.status === emptyStatus) return "{}"; // 예: osv-scanner 128 = 검사할 패키지 파일 없음 → 취약점 0건
+    if (e.status === emptyStatus) return '{}'; // 예: osv-scanner 128 = 검사할 패키지 파일 없음 → 취약점 0건
     throw e;
   }
 }
@@ -64,7 +64,7 @@ export function parseKnip(json) {
   const out = [];
   for (const issue of data.issues ?? []) {
     for (const kind of ['files', 'dependencies', 'devDependencies', 'exports', 'types', 'unlisted']) {
-      const v = kind === 'files' ? (issue.files?.length ? [{ name: issue.file }] : []) : issue[kind] ?? [];
+      const v = kind === 'files' ? (issue.files?.length ? [{ name: issue.file }] : []) : (issue[kind] ?? []);
       for (const item of v) {
         out.push(
           finding({
@@ -171,7 +171,13 @@ export function parseDepcruise(json) {
 // 설정 없이 돌리면 규칙이 없어 순환이 있어도 Clean으로 나오고 node_modules까지 훑는다 → 임시 설정 파일(대상 밖)을 쓴다.
 function depcruiseArgs() {
   const cfg = join(mkdtempSync(join(tmpdir(), 'pef-dc-')), 'dc.json');
-  writeFileSync(cfg, JSON.stringify({ forbidden: [{ name: 'no-circular', severity: 'warn', from: {}, to: { circular: true } }], options: { doNotFollow: { path: 'node_modules' }, exclude: { path: '(node_modules|\.next|\.git|dist|build|coverage)' } } }));
+  writeFileSync(
+    cfg,
+    JSON.stringify({
+      forbidden: [{ name: 'no-circular', severity: 'warn', from: {}, to: { circular: true } }],
+      options: { doNotFollow: { path: 'node_modules' }, exclude: { path: '(node_modules|.next|.git|dist|build|coverage)' } },
+    }),
+  );
   return ['--config', cfg, '--output-type', 'json', '.'];
 }
 
@@ -181,7 +187,13 @@ export const ADAPTERS = [
   { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
   { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '--config', 'p/owasp-top-ten', '.'], parse: parseSemgrep, items: [] },
   { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
-  { id: 'gitleaks', needs: () => true, args: ['detect', '--source', '.', '--report-format', 'json', '--report-path', '-', '--redact', '--no-banner', '--exit-code', '0'], parse: parseGitleaks, items: ['SE-10'] },
+  {
+    id: 'gitleaks',
+    needs: () => true,
+    args: ['detect', '--source', '.', '--report-format', 'json', '--report-path', '-', '--redact', '--no-banner', '--exit-code', '0'],
+    parse: parseGitleaks,
+    items: ['SE-10'],
+  },
   // 외부 도구 없이 이 프로세스에서 직접 센다 (run 이 있으면 설치 확인·셸 실행을 건너뜀). UI 소스가 없으면 해당 없음.
   { id: 'pef-design', needs: (d) => !!scanDesign(d.target), run: (dir) => designFindings(scanDesign(dir)).map(finding), items: ['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06'] },
   { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },

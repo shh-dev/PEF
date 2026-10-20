@@ -5,7 +5,10 @@ const sevOrder = ['P0', 'P1', 'P2', 'P3', 'P4'];
 
 export function renderReport(merged, s, now = new Date(), profile = null) {
   const m = merged.meta;
-  const top = merged.findings.filter((f) => f.disposition !== 'NoActionNow').filter((f) => f.severity === 'P0' || f.severity === 'P1').sort((a, b) => sevOrder.indexOf(a.severity) - sevOrder.indexOf(b.severity));
+  const top = merged.findings
+    .filter((f) => f.disposition !== 'NoActionNow')
+    .filter((f) => f.severity === 'P0' || f.severity === 'P1')
+    .sort((a, b) => sevOrder.indexOf(a.severity) - sevOrder.indexOf(b.severity));
   const row = (g) => `| ${g.name} | ${g.weight} | ${g.na ? '해당 없음' : g.insufficient ? '측정 불충분' : g.score} | ${g.coverage}% (${g.tested}/${g.applicable}) |`;
   const out = [
     `# PEF 보고서 — ${m.target}`,
@@ -15,7 +18,16 @@ export function renderReport(merged, s, now = new Date(), profile = null) {
     `- Git commit: ${m.commit}`,
     `- 앱 프로파일: ${m.profile}`,
     '',
-    ...(profile ? ['## 앱 분류와 고도화 방향', `- 유형: ${profile.label}${profile.note ? ` (사용자 확인: ${mask(profile.note)})` : ''}`, `- 방향: ${profile.direction}`, `- 기본값 대비 변경: ${profile.weightChanges.length ? `${profile.weightChanges.join(', ')} — ${profile.why}` : '없음'}`, `- 해당 없음 영역: ${profile.notApplicable.length ? `${profile.notApplicable.join(', ')} — ${profile.why}` : '없음'}`, ''] : []),
+    ...(profile
+      ? [
+          '## 앱 분류와 고도화 방향',
+          `- 유형: ${profile.label}${profile.note ? ` (사용자 확인: ${mask(profile.note)})` : ''}`,
+          `- 방향: ${profile.direction}`,
+          `- 기본값 대비 변경: ${profile.weightChanges.length ? `${profile.weightChanges.join(', ')} — ${profile.why}` : '없음'}`,
+          `- 해당 없음 영역: ${profile.notApplicable.length ? `${profile.notApplicable.join(', ')} — ${profile.why}` : '없음'}`,
+          '',
+        ]
+      : []),
     '## 1. 요약',
     `**${s.verdict}** · ${s.total === null ? '총점 산출 불가' : `${s.total}점`} (커버리지 ${s.coverage}%, 신뢰도 ${s.confidence})`,
     `Finding ${s.counts.findings}건 = P0 ${s.counts.P0} / P1 ${s.counts.P1} / P2 ${s.counts.P2} / P3 ${s.counts.P3} / P4 ${s.counts.P4}`,

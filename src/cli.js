@@ -1,19 +1,19 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { mergeResults, continueFrom } from './merge.js';
-import { score } from './score.js';
-import { renderReport } from './report.js';
-import { renderHtml } from './html.js';
-import { discover } from './discover.js';
-import { buildReceipt, renderReceiptMd, renderReceiptHtml } from './receipt.js';
+import { ADAPTERS, runAdapters } from './adapters.js';
 import { classify, TYPE_LABEL } from './classify.js';
-import { buildProfile, profileKey, PROFILES } from './profile.js';
-import { runAdapters, ADAPTERS } from './adapters.js';
-import { validateResult } from './schema.js';
+import { discover } from './discover.js';
+import { renderHtml } from './html.js';
 import { mask } from './mask.js';
-import { kst, kstStamp } from './time.js';
-import { stamp, changedNote, update, checkFormat, FORMAT } from './version.js';
+import { continueFrom, mergeResults } from './merge.js';
 import { buildPlan, renderPlan } from './plan.js';
+import { buildProfile, PROFILES, profileKey } from './profile.js';
+import { buildReceipt, renderReceiptHtml, renderReceiptMd } from './receipt.js';
+import { renderReport } from './report.js';
+import { validateResult } from './schema.js';
+import { score } from './score.js';
+import { kst, kstStamp } from './time.js';
+import { changedNote, checkFormat, FORMAT, stamp, update } from './version.js';
 import { auditWeb } from './web.js';
 
 const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, 대상 프로젝트 코드를 수정하지 않음)
@@ -109,33 +109,36 @@ function progressText(prev, cur, s) {
 }
 
 const reportOrBaseline = ({ cmd, args, flags, profileOf, load }) => {
-    if (!args.length) return fail('result.json 경로가 필요합니다');
-    const { errors, merged } = mergeResults(load(args));
-    if (errors.length) return fail(`스키마 오류:\n${errors.join('\n')}`);
-    const profile = profileOf(flags.out && resolve(flags.out));
-    const s = score(merged, profile);
-    if (cmd === 'baseline') {
-      if (!flags.out) return fail('--out 기준선 파일 경로가 필요합니다');
-      const scope = Object.keys(merged.coverage).sort();
-      writeFileSync(resolve(flags.out), JSON.stringify({ savedAt: kst(), commit: merged.meta.commit, scope, score: s, findingKeys: merged.findings.map((f) => `${f.ruleId}|${f.filePath ?? ''}|${f.line ?? ''}`) }, null, 2));
-      console.log(`기준선 저장: ${resolve(flags.out)}`);
-      return 0;
-    }
-    const md = renderReport(merged, s, new Date(), profile);
-    if (flags.out) {
-      const out = resolve(flags.out);
-      mkdirSync(out, { recursive: true });
-      writeFileSync(`${out}/report.md`, md);
-      if (flags.html) writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), [], profile));
-      if (flags.json) writeFileSync(`${out}/score.json`, JSON.stringify({ score: s, merged }, null, 2));
-      console.log(`저장: ${out}/report.md`);
-    } else console.log(flags.json ? JSON.stringify(s, null, 2) : md);
-    return s.verdict.startsWith('출시') ? 1 : 0;
+  if (!args.length) return fail('result.json 경로가 필요합니다');
+  const { errors, merged } = mergeResults(load(args));
+  if (errors.length) return fail(`스키마 오류:\n${errors.join('\n')}`);
+  const profile = profileOf(flags.out && resolve(flags.out));
+  const s = score(merged, profile);
+  if (cmd === 'baseline') {
+    if (!flags.out) return fail('--out 기준선 파일 경로가 필요합니다');
+    const scope = Object.keys(merged.coverage).sort();
+    writeFileSync(
+      resolve(flags.out),
+      JSON.stringify({ savedAt: kst(), commit: merged.meta.commit, scope, score: s, findingKeys: merged.findings.map((f) => `${f.ruleId}|${f.filePath ?? ''}|${f.line ?? ''}`) }, null, 2),
+    );
+    console.log(`기준선 저장: ${resolve(flags.out)}`);
+    return 0;
+  }
+  const md = renderReport(merged, s, new Date(), profile);
+  if (flags.out) {
+    const out = resolve(flags.out);
+    mkdirSync(out, { recursive: true });
+    writeFileSync(`${out}/report.md`, md);
+    if (flags.html) writeFileSync(`${out}/report.html`, renderHtml(merged, s, new Date(), [], profile));
+    if (flags.json) writeFileSync(`${out}/score.json`, JSON.stringify({ score: s, merged }, null, 2));
+    console.log(`저장: ${out}/report.md`);
+  } else console.log(flags.json ? JSON.stringify(s, null, 2) : md);
+  return s.verdict.startsWith('출시') ? 1 : 0;
 };
 
 // 명령별 처리 함수. 각 함수는 종료 코드(또는 그것을 돌려주는 Promise)를 반환한다.
 const COMMANDS = {
-  web: ({ args, flags, profileOf, load }) => {
+  web: ({ args, flags }) => {
     // 실행 중인 사이트 점검: 사용자가 준 주소에만 요청한다 (Lighthouse 접근성·성능 + 보안 헤더·쿠키 속성)
     if (!args[0]) return fail('사용법: pef web <http(s)://주소> [--out 폴더]');
     return auditWeb(args[0]).then(
@@ -150,7 +153,7 @@ const COMMANDS = {
       (e) => fail(e.message),
     );
   },
-  plan: ({ args, flags, profileOf, load }) => {
+  plan: ({ args, profileOf }) => {
     // 고도화를 시작하면 먼저 부르는 명령: 파트별 해야 할 일을 계산해 계획표로 보여 준다. 최초 작성 시각은 plan.json 에 남긴다.
     const out = resolve(args[0] ?? '.pef');
     if (!existsSync(`${out}/current.json`)) return fail(`${out}/current.json 이 없습니다 — pef audit 후 pef checkpoint 를 먼저 하세요`);
@@ -161,19 +164,30 @@ const COMMANDS = {
     console.log(renderPlan(plan, first));
     return 0;
   },
-  update: ({ args, flags, profileOf, load }) => {
+  update: () => {
     const r = update();
     console.log(r.msg);
     return r.ok ? 0 : 1;
   },
-  discover: ({ args, flags, profileOf, load }) => {
+  discover: ({ args }) => {
     const dir = resolve(args[0] ?? '.');
     const c = classify(dir);
     const main = c.types[0];
-    console.log(JSON.stringify({ ...discover(dir), classification: { ...c, 추정: TYPE_LABEL[profileKey(main.type)] }, proposedProfile: buildProfile(main.type), 다음: '사용자에게 유형을 확인받고 pef profile <유형> --out <.pef> 로 확정' }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ...discover(dir),
+          classification: { ...c, 추정: TYPE_LABEL[profileKey(main.type)] },
+          proposedProfile: buildProfile(main.type),
+          다음: '사용자에게 유형을 확인받고 pef profile <유형> --out <.pef> 로 확정',
+        },
+        null,
+        2,
+      ),
+    );
     return 0;
   },
-  receipt: ({ args, flags, profileOf, load }) => {
+  receipt: ({ args, flags }) => {
     // 앱 영수증: 연결된 서비스·계정·MCP·환경변수 이름을 한 장으로. 시크릿 값은 읽지 않고 .env 파일은 열지 않는다.
     const dir = resolve(args[0] ?? '.');
     if (!existsSync(dir)) return fail(`폴더가 없습니다: ${dir}`);
@@ -185,7 +199,7 @@ const COMMANDS = {
     console.log(`저장: ${out}/receipt.html (+ receipt.md)`);
     return 0;
   },
-  profile: ({ args, flags, profileOf, load }) => {
+  profile: ({ args, flags }) => {
     // 사용자가 확인한 앱 유형을 저장한다. 이후 점수(가중치·해당 없음)와 보고서가 이 프로파일을 따른다.
     const [type] = args;
     if (!type || !flags.out) return fail(`사용법: pef profile <${Object.keys(PROFILES).join('|')}> --out <.pef 폴더> [--note "사용자 답변 요약"]`);
@@ -198,7 +212,7 @@ const COMMANDS = {
 해당 없음 영역: ${p.notApplicable.join(', ') || '없음'} (${p.why})`);
     return 0;
   },
-  audit: ({ args, flags, profileOf, load }) => {
+  audit: ({ args, flags }) => {
     const dir = resolve(args[0] ?? '.');
     const discovery = discover(dir);
     const result = buildAuditResult(dir, discovery, runAdapters(dir, discovery));
@@ -211,7 +225,7 @@ const COMMANDS = {
     for (const [id, note] of Object.entries(result.coverageNotes)) console.log(`  미검사 ${id}: ${note}`);
     return 0;
   },
-  validate: ({ args, flags, profileOf, load }) => {
+  validate: ({ args }) => {
     if (!args.length) return fail('result.json 경로가 필요합니다');
     let bad = 0;
     for (const f of args) {
@@ -223,10 +237,11 @@ const COMMANDS = {
   },
   report: reportOrBaseline,
   baseline: reportOrBaseline,
-  triage: ({ args, flags, profileOf, load }) => {
+  triage: ({ args, flags }) => {
     // 규칙 단위 일괄 처분. 아직 처분이 없거나 NeedsCheck 인 Finding 에만 적용한다 (이미 정한 처분은 덮어쓰지 않음).
     const [file] = args;
-    if (!file || !flags.rule || !flags.disposition) return fail('사용법: pef triage <result.json> --rule <ID> --disposition <ActNow|Plan|NoActionNow> --reason "이유" [--severity P3] [--source 도구] [--evidence "근거" --recheck "조건"]');
+    if (!file || !flags.rule || !flags.disposition)
+      return fail('사용법: pef triage <result.json> --rule <ID> --disposition <ActNow|Plan|NoActionNow> --reason "이유" [--severity P3] [--source 도구] [--evidence "근거" --recheck "조건"]');
     const r = readJson(file);
     let n = 0;
     for (const f of r.findings) {
@@ -259,7 +274,8 @@ const COMMANDS = {
       if (r.errors.length) return fail(`스키마 오류:\n${r.errors.join('\n')}`);
       if (prior) ({ merged, newlyFixed } = continueFrom(prior, r.merged));
       else merged = r.merged;
-    } else if (prior) merged = prior; // 결과 파일 없이 부르면 current.json(예: fixStatus 수정분)만 다시 계산
+    } else if (prior)
+      merged = prior; // 결과 파일 없이 부르면 current.json(예: fixStatus 수정분)만 다시 계산
     else return fail('이어갈 current.json 이 없습니다. result.json 을 같이 주세요');
     const errs = validateResult(merged);
     if (errs.length) return fail(`검증 실패 (저장 안 함):\n${errs.slice(0, 8).join('\n')}`);
@@ -294,7 +310,7 @@ const COMMANDS = {
     console.log(`\n저장: ${out} (current.json, history.json, report.html)`);
     return s.verdict.startsWith('출시') ? 1 : 0;
   },
-  status: ({ args, flags, profileOf, load }) => {
+  status: ({ args, profileOf }) => {
     // 새 세션이 이어서 시작할 때 첫 번째로 부르는 명령: 지금까지의 기록과 남은 일
     const out = resolve(args[0] ?? '.pef');
     if (!existsSync(`${out}/history.json`)) return fail(`${out} 에 기록이 없습니다 — 처음부터 시작하세요 (pef audit)`);
@@ -305,10 +321,10 @@ const COMMANDS = {
     const note = changedNote(history.at(-1));
     if (note) console.log(`\n⚠ ${note}\n  → pef checkpoint --out ${args[0] ?? '.pef'} --note "PEF 갱신 반영" 한 번으로 새 기준을 적용하세요`);
     console.log('\n지금까지의 기록');
-    history.forEach((e, i) => console.log(`  ${String(i + 1).padStart(2, '0')}. ${e.at}  ${e.total ?? '-'}점  ${e.note || ''}`));
+    for (const [i, e] of history.entries()) console.log(`  ${String(i + 1).padStart(2, '0')}. ${e.at}  ${e.total ?? '-'}점  ${e.note || ''}`);
     return 0;
   },
-  compare: ({ args, flags, profileOf, load }) => {
+  compare: ({ args, load }) => {
     const [basePath, ...files] = args;
     if (!basePath || !files.length) return fail('사용법: pef compare <기준선.json> <result.json...>');
     const base = readJson(basePath);

@@ -1,10 +1,11 @@
 // "앱 영수증": 이 앱이 어떤 서비스·계정·MCP·환경변수와 연결돼 있는지 한 장으로 모은다.
 // 원칙: 읽기 전용 / 시크릿 값은 절대 읽어 출력하지 않는다(이름·존재·위치만) / .env* 파일은 열지 않는다 /
 //       날짜는 git 기록 기준(실제 계정 연결 시점이 아니라 "저장소에 처음 나타난 날")이며 그렇게 표기한다.
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+
 import { execFileSync, execSync } from 'node:child_process';
-import { join, basename } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { mask } from './mask.js';
 import { kst } from './time.js';
 
@@ -62,25 +63,87 @@ const addedOn = (dir, file) => firstLine(git(dir, 'log', '--diff-filter=A', '--f
 /** 문자열(needle)이 파일에 처음 등장한 커밋 날짜 */
 const introducedOn = (dir, needle, file) => firstLine(git(dir, 'log', `-S${needle}`, '--format=%cs', '--reverse', '--', file));
 
-const idMask = (s) => (s && s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)} (${s.length}자)` : s ?? '');
+const idMask = (s) => (s && s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)} (${s.length}자)` : (s ?? ''));
 
 const SERVICES = {
-  '@supabase/supabase-js': 'Supabase', '@supabase/ssr': 'Supabase', stripe: 'Stripe', '@tosspayments/payment-sdk': '토스페이먼츠', '@tosspayments/tosspayments-sdk': '토스페이먼츠',
-  firebase: 'Firebase', 'firebase-admin': 'Firebase', 'aws-sdk': 'AWS', '@aws-sdk/client-s3': 'AWS S3', '@aws-sdk/lib-storage': 'AWS S3', '@aws-sdk/client-ses': 'AWS SES',
-  '@sentry/nextjs': 'Sentry', '@sentry/node': 'Sentry', '@sentry/react': 'Sentry', 'posthog-js': 'PostHog', 'posthog-node': 'PostHog', resend: 'Resend', nodemailer: '이메일(SMTP)',
-  twilio: 'Twilio', solapi: 'Solapi(문자)', openai: 'OpenAI', '@anthropic-ai/sdk': 'Anthropic', '@google/generative-ai': 'Google AI', '@google/genai': 'Google AI', googleapis: 'Google API',
-  'next-auth': 'NextAuth', '@clerk/nextjs': 'Clerk', '@auth0/nextjs-auth0': 'Auth0', '@upstash/redis': 'Upstash Redis', '@vercel/analytics': 'Vercel Analytics',
-  wrangler: 'Cloudflare Workers', '@opennextjs/cloudflare': 'Cloudflare(OpenNext)', '@cloudflare/workers-types': 'Cloudflare Workers', 'mixpanel-browser': 'Mixpanel',
-  '@slack/bolt': 'Slack', 'discord.js': 'Discord', telegraf: 'Telegram', '@octokit/rest': 'GitHub API', algoliasearch: 'Algolia', '@mux/mux-node': 'Mux', '@vimeo/vimeo': 'Vimeo',
-  cloudinary: 'Cloudinary', pusher: 'Pusher', '@neondatabase/serverless': 'Neon', '@planetscale/database': 'PlanetScale', mongodb: 'MongoDB', pg: 'PostgreSQL(직접 연결)',
-  mysql2: 'MySQL', redis: 'Redis', ioredis: 'Redis', '@prisma/client': 'Prisma', 'drizzle-orm': 'Drizzle ORM',
+  '@supabase/supabase-js': 'Supabase',
+  '@supabase/ssr': 'Supabase',
+  stripe: 'Stripe',
+  '@tosspayments/payment-sdk': '토스페이먼츠',
+  '@tosspayments/tosspayments-sdk': '토스페이먼츠',
+  firebase: 'Firebase',
+  'firebase-admin': 'Firebase',
+  'aws-sdk': 'AWS',
+  '@aws-sdk/client-s3': 'AWS S3',
+  '@aws-sdk/lib-storage': 'AWS S3',
+  '@aws-sdk/client-ses': 'AWS SES',
+  '@sentry/nextjs': 'Sentry',
+  '@sentry/node': 'Sentry',
+  '@sentry/react': 'Sentry',
+  'posthog-js': 'PostHog',
+  'posthog-node': 'PostHog',
+  resend: 'Resend',
+  nodemailer: '이메일(SMTP)',
+  twilio: 'Twilio',
+  solapi: 'Solapi(문자)',
+  openai: 'OpenAI',
+  '@anthropic-ai/sdk': 'Anthropic',
+  '@google/generative-ai': 'Google AI',
+  '@google/genai': 'Google AI',
+  googleapis: 'Google API',
+  'next-auth': 'NextAuth',
+  '@clerk/nextjs': 'Clerk',
+  '@auth0/nextjs-auth0': 'Auth0',
+  '@upstash/redis': 'Upstash Redis',
+  '@vercel/analytics': 'Vercel Analytics',
+  wrangler: 'Cloudflare Workers',
+  '@opennextjs/cloudflare': 'Cloudflare(OpenNext)',
+  '@cloudflare/workers-types': 'Cloudflare Workers',
+  'mixpanel-browser': 'Mixpanel',
+  '@slack/bolt': 'Slack',
+  'discord.js': 'Discord',
+  telegraf: 'Telegram',
+  '@octokit/rest': 'GitHub API',
+  algoliasearch: 'Algolia',
+  '@mux/mux-node': 'Mux',
+  '@vimeo/vimeo': 'Vimeo',
+  cloudinary: 'Cloudinary',
+  pusher: 'Pusher',
+  '@neondatabase/serverless': 'Neon',
+  '@planetscale/database': 'PlanetScale',
+  mongodb: 'MongoDB',
+  pg: 'PostgreSQL(직접 연결)',
+  mysql2: 'MySQL',
+  redis: 'Redis',
+  ioredis: 'Redis',
+  '@prisma/client': 'Prisma',
+  'drizzle-orm': 'Drizzle ORM',
 };
 
 const ENV_SERVICE = [
-  [/^SUPABASE/, 'Supabase'], [/^(CLOUDFLARE|CF_)/, 'Cloudflare'], [/^R2_/, 'Cloudflare R2'], [/^TOSS/, '토스페이먼츠'], [/^STRIPE/, 'Stripe'], [/^SENTRY/, 'Sentry'],
-  [/^OPENAI/, 'OpenAI'], [/^ANTHROPIC/, 'Anthropic'], [/^GOOGLE|^GEMINI/, 'Google'], [/^KAKAO/, '카카오'], [/^NAVER/, '네이버'], [/^(SOLAPI|SMS_)/, '문자 발송'],
-  [/^(INSTAGRAM|META_|FACEBOOK|FB_|THREADS)/, 'Meta(인스타 등)'], [/^AWS/, 'AWS'], [/^VERCEL/, 'Vercel'], [/^GITHUB/, 'GitHub'], [/^SLACK/, 'Slack'], [/^DISCORD/, 'Discord'],
-  [/^TELEGRAM/, 'Telegram'], [/^(RESEND|SMTP|MAIL)/, '이메일'], [/^UPSTASH/, 'Upstash'], [/^REDIS/, 'Redis'], [/^(DATABASE|DB_|POSTGRES|PG)/, '데이터베이스'],
+  [/^SUPABASE/, 'Supabase'],
+  [/^(CLOUDFLARE|CF_)/, 'Cloudflare'],
+  [/^R2_/, 'Cloudflare R2'],
+  [/^TOSS/, '토스페이먼츠'],
+  [/^STRIPE/, 'Stripe'],
+  [/^SENTRY/, 'Sentry'],
+  [/^OPENAI/, 'OpenAI'],
+  [/^ANTHROPIC/, 'Anthropic'],
+  [/^GOOGLE|^GEMINI/, 'Google'],
+  [/^KAKAO/, '카카오'],
+  [/^NAVER/, '네이버'],
+  [/^(SOLAPI|SMS_)/, '문자 발송'],
+  [/^(INSTAGRAM|META_|FACEBOOK|FB_|THREADS)/, 'Meta(인스타 등)'],
+  [/^AWS/, 'AWS'],
+  [/^VERCEL/, 'Vercel'],
+  [/^GITHUB/, 'GitHub'],
+  [/^SLACK/, 'Slack'],
+  [/^DISCORD/, 'Discord'],
+  [/^TELEGRAM/, 'Telegram'],
+  [/^(RESEND|SMTP|MAIL)/, '이메일'],
+  [/^UPSTASH/, 'Upstash'],
+  [/^REDIS/, 'Redis'],
+  [/^(DATABASE|DB_|POSTGRES|PG)/, '데이터베이스'],
   [/^(JWT|AUTH|SESSION|NEXTAUTH|CRON)/, '인증·내부'],
 ];
 const envService = (n) => ENV_SERVICE.find(([re]) => re.test(n.replace(/^(NEXT_PUBLIC_|VITE_|PUBLIC_)/, '')))?.[1] ?? '기타';
@@ -133,8 +196,12 @@ function cloudflare(dir) {
       routes: cfg ? (cfg.routes ?? []).map((r) => (typeof r === 'string' ? r : r.pattern)) : [...raw.matchAll(/pattern\s*=\s*"([^"]+)"/g)].map((m) => m[1]),
       crons: cfg?.triggers?.crons ?? [...raw.matchAll(/crons\s*=\s*\[([^\]]*)\]/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1])),
       bindings: {
-        KV: names(cfg?.kv_namespaces, 'binding'), D1: names(cfg?.d1_databases, 'binding'), R2: names(cfg?.r2_buckets, 'binding'),
-        Queues: names(cfg?.queues?.producers, 'binding'), Hyperdrive: names(cfg?.hyperdrive, 'binding'), Services: names(cfg?.services, 'binding'),
+        KV: names(cfg?.kv_namespaces, 'binding'),
+        D1: names(cfg?.d1_databases, 'binding'),
+        R2: names(cfg?.r2_buckets, 'binding'),
+        Queues: names(cfg?.queues?.producers, 'binding'),
+        Hyperdrive: names(cfg?.hyperdrive, 'binding'),
+        Services: names(cfg?.services, 'binding'),
       },
       varNames: cfg?.vars ? Object.keys(cfg.vars) : [], // 값은 읽지 않는다
       environments: envs,
@@ -172,7 +239,14 @@ function supabase(dir) {
 
 function hosting(dir) {
   const out = [];
-  const remotes = [...new Set(git(dir, 'remote', '-v').split('\n').filter(Boolean).map((l) => l.split(/\s+/)[1].replace(/\/\/[^@/]+@/, '//')))];
+  const remotes = [
+    ...new Set(
+      git(dir, 'remote', '-v')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => l.split(/\s+/)[1].replace(/\/\/[^@/]+@/, '//')),
+    ),
+  ];
   if (remotes.length) out.push({ service: 'Git 원격', detail: remotes.join(', ') });
   const wf = join(dir, '.github', 'workflows');
   if (existsSync(wf)) {
@@ -180,13 +254,24 @@ function hosting(dir) {
       const t = text(join(wf, n));
       const deploy = ['wrangler', 'vercel', 'ssh ', 'docker push', 'fly deploy', 'netlify', 'aws '].filter((k) => t.includes(k));
       const sched = [...t.matchAll(/cron:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
-      out.push({ service: 'GitHub Actions', detail: `${n}${deploy.length ? ` — 배포 단서: ${deploy.join(', ')}` : ''}${sched.length ? ` — 예약: ${sched.join(', ')}` : ''}`, since: addedOn(dir, `.github/workflows/${n}`) });
+      out.push({
+        service: 'GitHub Actions',
+        detail: `${n}${deploy.length ? ` — 배포 단서: ${deploy.join(', ')}` : ''}${sched.length ? ` — 예약: ${sched.join(', ')}` : ''}`,
+        since: addedOn(dir, `.github/workflows/${n}`),
+      });
     }
   }
   const vp = json(join(dir, '.vercel', 'project.json'));
   if (vp) out.push({ service: 'Vercel', detail: `projectId ${idMask(vp.projectId)}, orgId ${idMask(vp.orgId)}` });
   if (existsSync(join(dir, 'vercel.json'))) out.push({ service: 'Vercel', detail: 'vercel.json', since: addedOn(dir, 'vercel.json') });
-  for (const [f, label] of [['netlify.toml', 'Netlify'], ['fly.toml', 'Fly.io'], ['render.yaml', 'Render'], ['railway.json', 'Railway'], ['firebase.json', 'Firebase Hosting'], ['Dockerfile', 'Docker']]) {
+  for (const [f, label] of [
+    ['netlify.toml', 'Netlify'],
+    ['fly.toml', 'Fly.io'],
+    ['render.yaml', 'Render'],
+    ['railway.json', 'Railway'],
+    ['firebase.json', 'Firebase Hosting'],
+    ['Dockerfile', 'Docker'],
+  ]) {
     if (existsSync(join(dir, f))) out.push({ service: label, detail: f, since: addedOn(dir, f) });
   }
   const fb = json(join(dir, '.firebaserc'));
@@ -239,7 +324,8 @@ function mcp(dir) {
     if (existsSync(p)) servers.push(...mcpFromJson(json(p), f, dir, { scope: '이 프로젝트' }));
   }
   const codex = text(join(dir, '.codex', 'config.toml'));
-  for (const m of codex.matchAll(/^\[mcp_servers\.([\w-]+)\]/gm)) servers.push({ name: m[1], source: '.codex/config.toml', kind: '(codex)', scope: '이 프로젝트', since: addedOn(dir, '.codex/config.toml'), envNames: [], headerNames: [] });
+  for (const m of codex.matchAll(/^\[mcp_servers\.([\w-]+)\]/gm))
+    servers.push({ name: m[1], source: '.codex/config.toml', kind: '(codex)', scope: '이 프로젝트', since: addedOn(dir, '.codex/config.toml'), envNames: [], headerNames: [] });
 
   // 사용자 전역: 이 프로젝트에 붙은 것만 + 전역 공통 서버 이름
   const home = json(join(homedir(), '.claude.json'));
@@ -247,7 +333,9 @@ function mcp(dir) {
   const proj = home?.projects ? Object.entries(home.projects).find(([k]) => norm(k) === norm(dir)) : null;
   if (proj) servers.push(...mcpFromJson(proj[1], '~/.claude.json (이 프로젝트)', null, { scope: '이 프로젝트(사용자 설정)' }));
   if (home?.mcpServers) servers.push(...mcpFromJson(home, '~/.claude.json (전역)', null, { scope: '전역(모든 프로젝트 공통)' }));
-  const plugins = Object.entries(json(join(homedir(), '.claude', 'settings.json'))?.enabledPlugins ?? {}).filter(([, on]) => on).map(([n]) => n);
+  const plugins = Object.entries(json(join(homedir(), '.claude', 'settings.json'))?.enabledPlugins ?? {})
+    .filter(([, on]) => on)
+    .map(([n]) => n);
 
   const skills = [];
   for (const base of ['.claude/skills', '.agents/skills']) {
@@ -371,12 +459,21 @@ export function buildReceipt(dir, now = new Date(), { liveCheck = false } = {}) 
   const forgotten = [];
   if (env.trackedRealFiles.length) forgotten.push(`⚠ git이 추적 중인 실제 환경 파일: ${env.trackedRealFiles.join(', ')} (시크릿이 저장소에 올라갔을 수 있음 — 값은 열어보지 않음)`);
   if (env.realFiles.length) forgotten.push(`실제 환경 파일이 있음: ${env.realFiles.join(', ')} — 내용은 열지 않았고, 어느 계정/DB를 가리키는지는 확인 못 함`);
-  if (undocumented.length) forgotten.push(`코드가 쓰는데 .env.example 에 없는 환경변수 ${undocumented.length}개: ${undocumented.slice(0, 12).map((r) => r.name).join(', ')}${undocumented.length > 12 ? ' …' : ''}`);
+  if (undocumented.length)
+    forgotten.push(
+      `코드가 쓰는데 .env.example 에 없는 환경변수 ${undocumented.length}개: ${undocumented
+        .slice(0, 12)
+        .map((r) => r.name)
+        .join(', ')}${undocumented.length > 12 ? ' …' : ''}`,
+    );
   if (cf.some((c) => !c.accountId)) forgotten.push('Cloudflare 계정 ID가 파일에 없음 → 어느 계정에 배포되는지 파일만으로는 알 수 없음 (대시보드 또는 wrangler whoami 로 확인)');
   if (sb.present && !sb.projectIdInConfig && !sb.linkedRef && !sb.refsInCode.length) forgotten.push('Supabase 사용 흔적은 있으나 프로젝트 주소(ref)를 찾지 못함');
   if (sb.refsInCode.length > 1) forgotten.push(`코드에 서로 다른 Supabase 프로젝트 주소가 ${sb.refsInCode.length}개 보임 (운영/스테이징 구분인지 확인): ${sb.refsInCode.map((r) => r.ref).join(', ')}`);
   const globalMcp = m.servers.filter((s) => s.scope.startsWith('전역'));
-  if (m.servers.length) forgotten.push(`MCP 서버 ${m.servers.length}개가 붙어 있음 — 각 서버가 어느 계정으로 로그인됐는지는 설정 파일에 없어 확인 못 함${globalMcp.length ? ` (전역 ${globalMcp.length}개는 모든 프로젝트에 공통 적용)` : ''}`);
+  if (m.servers.length)
+    forgotten.push(
+      `MCP 서버 ${m.servers.length}개가 붙어 있음 — 각 서버가 어느 계정으로 로그인됐는지는 설정 파일에 없어 확인 못 함${globalMcp.length ? ` (전역 ${globalMcp.length}개는 모든 프로젝트에 공통 적용)` : ''}`,
+    );
   if (sched.length) forgotten.push(`예약 작업 ${sched.length}개 — 실제로 호출·실행되는지는 코드만으로 확인 못 함`);
 
   return {
@@ -418,7 +515,14 @@ export function renderReceiptMd(r) {
     L.push(`- **${c.name ?? '(이름 없음)'}** (${c.file}, 저장소 추가 ${d(c.addedOn)})`);
     L.push(`  - 계정 ID: ${c.accountId ? idMask(c.accountId) : '파일에 없음'}`);
     L.push(`  - 도메인(routes): ${list(c.routes)} · 예약(크론): ${list(c.crons)} · 환경: ${list(c.environments)}`);
-    L.push(`  - 연결 자원: ${Object.entries(c.bindings).filter(([, v]) => v.length).map(([k, v]) => `${k}(${v.join(', ')})`).join(' · ') || '없음'}`);
+    L.push(
+      `  - 연결 자원: ${
+        Object.entries(c.bindings)
+          .filter(([, v]) => v.length)
+          .map(([k, v]) => `${k}(${v.join(', ')})`)
+          .join(' · ') || '없음'
+      }`,
+    );
     L.push(`  - 설정된 vars 이름: ${list(c.varNames)} (값은 읽지 않음)`);
   }
 
@@ -439,12 +543,19 @@ export function renderReceiptMd(r) {
     const c = r.live.cloudflare;
     if (c) {
       if (c.error) L.push(`- Cloudflare: 확인 실패 (${c.error}) — 로그인 안 됐거나 wrangler 없음`);
-      else L.push(`- Cloudflare 로그인: ${c.email ?? '이메일 확인 불가'} · 접근 가능한 계정: ${c.accounts.length ? c.accounts.map((a) => `${a.name} (${idMask(a.id)})${c.codeAccountIds.includes(a.id) ? ' ← 이 앱 설정과 일치' : ''}`).join(' / ') : '목록 없음'}`);
+      else
+        L.push(
+          `- Cloudflare 로그인: ${c.email ?? '이메일 확인 불가'} · 접근 가능한 계정: ${c.accounts.length ? c.accounts.map((a) => `${a.name} (${idMask(a.id)})${c.codeAccountIds.includes(a.id) ? ' ← 이 앱 설정과 일치' : ''}`).join(' / ') : '목록 없음'}`,
+        );
     }
     const sp = r.live.supabase;
     if (sp) {
       if (sp.error) L.push(`- Supabase: 확인 실패 (${sp.error}) — 로그인 안 됐거나 supabase CLI 없음`);
-      else L.push(...sp.projects.map((p) => `- Supabase 프로젝트 **${p.name}** (${p.ref}, ${p.region}, 생성 ${p.created})${p.usedByApp ? ' ← **이 앱이 쓰는 프로젝트**' : ''}`), ...(sp.projects.length ? [] : ['- Supabase: 접근 가능한 프로젝트 없음']));
+      else
+        L.push(
+          ...sp.projects.map((p) => `- Supabase 프로젝트 **${p.name}** (${p.ref}, ${p.region}, 생성 ${p.created})${p.usedByApp ? ' ← **이 앱이 쓰는 프로젝트**' : ''}`),
+          ...(sp.projects.length ? [] : ['- Supabase: 접근 가능한 프로젝트 없음']),
+        );
     }
     L.push('- ⚠ "지금 로그인된 계정"이지 "이 앱이 배포되는 계정"이 같다는 보장은 아닙니다. 위에서 "일치"라고 표시된 것만 확인된 것입니다.');
   }
@@ -453,9 +564,17 @@ export function renderReceiptMd(r) {
   L.push(...(r.dependencies.length ? r.dependencies.map((x) => `- **${x.service}** — ${x.packages.join(', ')} (처음 추가 ${d(x.since)})`) : ['- 없음']));
 
   h('MCP·스킬·플러그인');
-  L.push(...(r.mcp.servers.length ? r.mcp.servers.map((x) => `- **${x.name}** [${x.scope}] ${x.kind}${x.host ? ` · ${x.host}` : ''}${x.command ? ` · \`${x.command}\`` : ''}${x.envNames.length ? ` · env 이름: ${x.envNames.join(', ')}` : ''}${x.headerNames.length ? ` · 헤더 이름: ${x.headerNames.join(', ')}` : ''} — ${x.source}${x.since ? `, 추가 ${x.since}` : ''}`) : ['- MCP 서버 설정 없음']));
+  L.push(
+    ...(r.mcp.servers.length
+      ? r.mcp.servers.map(
+          (x) =>
+            `- **${x.name}** [${x.scope}] ${x.kind}${x.host ? ` · ${x.host}` : ''}${x.command ? ` · \`${x.command}\`` : ''}${x.envNames.length ? ` · env 이름: ${x.envNames.join(', ')}` : ''}${x.headerNames.length ? ` · 헤더 이름: ${x.headerNames.join(', ')}` : ''} — ${x.source}${x.since ? `, 추가 ${x.since}` : ''}`,
+        )
+      : ['- MCP 서버 설정 없음']),
+  );
   if (r.mcp.plugins.length) L.push(`- 켜 둔 플러그인(전역): ${r.mcp.plugins.join(', ')}`);
-  if (r.mcp.skills.length || r.mcp.locked.length) L.push(`- 스킬: ${[...r.mcp.skills.map((x) => `${x.name}(${x.since ?? '날짜 없음'})`), ...r.mcp.locked.filter((n) => !r.mcp.skills.some((x) => x.name === n))].join(', ')}`);
+  if (r.mcp.skills.length || r.mcp.locked.length)
+    L.push(`- 스킬: ${[...r.mcp.skills.map((x) => `${x.name}(${x.since ?? '날짜 없음'})`), ...r.mcp.locked.filter((n) => !r.mcp.skills.some((x) => x.name === n))].join(', ')}`);
 
   h('환경변수 (이름만 · 값은 읽지 않음)');
   const groups = new Map();
@@ -470,7 +589,7 @@ export function renderReceiptMd(r) {
 
   h('이 영수증이 확인 못 한 것');
   L.push(...r.notChecked.map((x) => `- ${x}`));
-  return mask(L.join('\n')) + '\n';
+  return `${mask(L.join('\n'))}\n`;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -485,7 +604,9 @@ export function renderReceiptHtml(r) {
       if (line.startsWith('## ')) return `<h2>${esc(line.slice(3))}</h2>`;
       if (/^\s*- /.test(line)) {
         const indent = line.match(/^\s*/)[0].length;
-        return `<div class="row" style="margin-left:${indent * 6}px">${esc(line.replace(/^\s*- /, '')).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')}</div>`;
+        return `<div class="row" style="margin-left:${indent * 6}px">${esc(line.replace(/^\s*- /, ''))
+          .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')}</div>`;
       }
       return line.trim() ? `<p>${esc(line)}</p>` : '';
     })

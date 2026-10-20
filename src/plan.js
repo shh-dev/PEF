@@ -1,5 +1,5 @@
 // 고도화 작업 계획: 현재 상태(current.json)에서 "파트별 남은 일"을 계산한다. 저장된 체크 표시가 아니라 상태에서 매번 계산하므로 어긋나지 않는다.
-import { loadChecklists, appliesTo } from './checklist.js';
+import { loadChecklists } from './checklist.js';
 import { score } from './score.js';
 
 const CLOSED = new Set(['Fixed', 'Verified', 'AcceptedRisk']);

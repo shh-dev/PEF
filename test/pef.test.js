@@ -1,21 +1,33 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mask } from '../src/mask.js';
-import { validateResult } from '../src/schema.js';
-import { mergeResults } from '../src/merge.js';
-import { score } from '../src/score.js';
+import test from 'node:test';
+import { parseDepcruise, parseKnip, parseOsv, parseSemgrep } from '../src/adapters.js';
 import { loadChecklists } from '../src/checklist.js';
-import { kstStamp } from '../src/time.js';
-import { parseKnip, parseSemgrep, parseOsv, parseDepcruise } from '../src/adapters.js';
 import { buildAuditResult } from '../src/cli.js';
+import { mask } from '../src/mask.js';
+import { mergeResults } from '../src/merge.js';
+import { validateResult } from '../src/schema.js';
+import { score } from '../src/score.js';
+import { kstStamp } from '../src/time.js';
 
-const finding = (o = {}) => ({ id: 'F-1', category: '4.13 보안', ruleId: 'SE-01', title: 't', severity: 'P1', verification: 'Confirmed', evidence: 'e', fixStatus: 'Open', filePath: 'a.js', line: 1, ...o });
+const finding = (o = {}) => ({
+  id: 'F-1',
+  category: '4.13 보안',
+  ruleId: 'SE-01',
+  title: 't',
+  severity: 'P1',
+  verification: 'Confirmed',
+  evidence: 'e',
+  fixStatus: 'Open',
+  filePath: 'a.js',
+  line: 1,
+  ...o,
+});
 const result = (o = {}) => ({ meta: { target: 'x', commit: 'abc', profile: 'p', auditedAt: '2026-10-15T18:00:00+09:00', scope: ['13-security.md'] }, findings: [], coverage: {}, ...o });
 const all = (v) => Object.fromEntries([...loadChecklists().values()].flatMap((a) => a.ids).map((id) => [id, v]));
 
 test('마스커: 시크릿·이메일·전화', () => {
   assert.ok(!mask('API_KEY=abcdef123456').includes('abcdef123456'));
-  assert.ok(!mask('ghp_' + 'a'.repeat(30)).includes('aaaa'));
+  assert.ok(!mask(`ghp_${'a'.repeat(30)}`).includes('aaaa'));
   assert.equal(mask('kkenter@x.com'), 'kke***@x.com');
   assert.equal(mask('010-1234-5678'), '***-****-5678');
 });
@@ -37,7 +49,10 @@ test('스키마: 필수 항목 누락과 잘못된 enum 검출', () => {
 test('합치기: 중복 Finding 1건, 판정 충돌은 더 심각한 쪽', () => {
   const a = result({ findings: [finding()], coverage: { 'SE-01': 'Clean' } });
   const b = result({ findings: [finding({ severity: 'P0' })], coverage: { 'SE-01': 'Confirmed' } });
-  const { merged } = mergeResults([{ name: 'a', result: a }, { name: 'b', result: b }]);
+  const { merged } = mergeResults([
+    { name: 'a', result: a },
+    { name: 'b', result: b },
+  ]);
   assert.equal(merged.findings.length, 1);
   assert.equal(merged.findings[0].severity, 'P0');
   assert.equal(merged.coverage['SE-01'], 'Confirmed');
@@ -81,15 +96,40 @@ test('어댑터 파서: 도구 출력 → Finding (실제 체크리스트 ID 사
   const sg = parseSemgrep(JSON.stringify({ results: [{ check_id: 'x.y', path: 'b.js', start: { line: 3 }, extra: { severity: 'ERROR', message: 'bad', lines: 'SECRET=abc' } }] }));
   assert.equal(sg[0].severity, 'P1');
   assert.ok(!JSON.stringify(sg).includes('SECRET=abc')); // 코드 발췌는 넣지 않는다
-  const osv = parseOsv(JSON.stringify({ results: [{ source: { path: 'package-lock.json' }, packages: [{ package: { name: 'x', version: '1.0.0' }, groups: [{ ids: ['GHSA-1'], max_severity: '9.8' }], vulnerabilities: [{ id: 'GHSA-1', summary: 's' }] }] }] }));
+  const osv = parseOsv(
+    JSON.stringify({
+      results: [
+        {
+          source: { path: 'package-lock.json' },
+          packages: [{ package: { name: 'x', version: '1.0.0' }, groups: [{ ids: ['GHSA-1'], max_severity: '9.8' }], vulnerabilities: [{ id: 'GHSA-1', summary: 's' }] }],
+        },
+      ],
+    }),
+  );
   assert.equal(osv[0].severity, 'P0');
-  const dc = parseDepcruise(JSON.stringify({ summary: { violations: [{ from: 'a', to: 'b', rule: { name: 'no-circular' } }, { from: 'c', to: 'd', rule: { name: 'other' } }] } }));
+  const dc = parseDepcruise(
+    JSON.stringify({
+      summary: {
+        violations: [
+          { from: 'a', to: 'b', rule: { name: 'no-circular' } },
+          { from: 'c', to: 'd', rule: { name: 'other' } },
+        ],
+      },
+    }),
+  );
   assert.equal(dc.length, 1);
 });
 
 test('audit 결과: 도구 미설치 항목은 NotTested (통과 처리 금지) 이고 스키마를 통과한다', () => {
   const disc = { stack: ['node'], supportLevel: 'Detection Only', git: { commit: 'abc1234', uncommittedChanges: 0, behindRemote: 0 } };
-  const r = buildAuditResult('C:/x', disc, { findings: [], toolsUsed: [], notTested: [{ tool: 'knip', reason: '도구 미설치' }, { tool: 'osv-scanner', reason: '도구 미설치' }] });
+  const r = buildAuditResult('C:/x', disc, {
+    findings: [],
+    toolsUsed: [],
+    notTested: [
+      { tool: 'knip', reason: '도구 미설치' },
+      { tool: 'osv-scanner', reason: '도구 미설치' },
+    ],
+  });
   assert.equal(r.coverage['C-02'], 'NotTested');
   assert.equal(r.coverage['SE-11'], 'NotTested');
   assert.deepEqual(validateResult(r), []);
@@ -124,7 +164,11 @@ test('처분: 근거 있는 NoActionNow 는 감점·차단에서 빠지고 따�
 });
 
 test('OSV: 취약 버전 설치는 사실이지만 사용 여부를 모르므로 Suspected + NeedsCheck', () => {
-  const osv = parseOsv(JSON.stringify({ results: [{ source: { path: 'l' }, packages: [{ package: { name: 'x', version: '1' }, groups: [{ ids: ['G'], max_severity: '9.8' }], vulnerabilities: [{ id: 'G', summary: 's' }] }] }] }));
+  const osv = parseOsv(
+    JSON.stringify({
+      results: [{ source: { path: 'l' }, packages: [{ package: { name: 'x', version: '1' }, groups: [{ ids: ['G'], max_severity: '9.8' }], vulnerabilities: [{ id: 'G', summary: 's' }] }] }],
+    }),
+  );
   assert.equal(osv[0].verification, 'Suspected');
   assert.equal(osv[0].disposition, 'NeedsCheck');
 });
@@ -146,15 +190,29 @@ test('triage: 규칙 단위 일괄 처분, 이미 정한 처분은 덮어쓰지 
   const { run } = await import('../src/cli.js');
   const dir = mkdtempSync(`${tmpdir()}/pef-t-`);
   const p = `${dir}/r.json`;
-  writeFileSync(p, JSON.stringify(result({ findings: [finding({ id: 'A', ruleId: 'C-02', line: 1 }), finding({ id: 'B', ruleId: 'C-02', line: 2, disposition: 'ActNow' }), finding({ id: 'C', ruleId: 'SE-01', line: 3 })] })));
-  const quiet = console.log; console.log = () => {}; const qe = console.error; console.error = () => {};
+  writeFileSync(
+    p,
+    JSON.stringify(
+      result({ findings: [finding({ id: 'A', ruleId: 'C-02', line: 1 }), finding({ id: 'B', ruleId: 'C-02', line: 2, disposition: 'ActNow' }), finding({ id: 'C', ruleId: 'SE-01', line: 3 })] }),
+    ),
+  );
+  const quiet = console.log;
+  console.log = () => {};
+  const qe = console.error;
+  console.error = () => {};
   try {
     assert.equal(run(['triage', p, '--rule', 'C-02', '--disposition', 'Plan', '--reason', '정리 예정']), 0);
     const r = JSON.parse(readFileSync(p, 'utf8'));
-    assert.deepEqual(r.findings.map((f) => f.disposition), ['Plan', 'ActNow', undefined]);
+    assert.deepEqual(
+      r.findings.map((f) => f.disposition),
+      ['Plan', 'ActNow', undefined],
+    );
     assert.equal(run(['triage', p, '--rule', 'SE-01', '--disposition', 'NoActionNow', '--reason', 'x']), 2);
     assert.equal(JSON.parse(readFileSync(p, 'utf8')).findings[2].disposition, undefined);
-  } finally { console.log = quiet; console.error = qe; }
+  } finally {
+    console.log = quiet;
+    console.error = qe;
+  }
 });
 
 test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진 도구 Finding 은 Verified, 점수 변화가 기록된다', async () => {
@@ -169,7 +227,9 @@ test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진
   const r2 = result({ findings: [], coverage: base });
   r2.meta.toolsUsed = ['osv-scanner']; // 재검사에서 osv-scanner 를 실제로 돌렸다
   writeFileSync(`${dir}/r2.json`, JSON.stringify(r2));
-  const quiet = console.log; const logs = []; console.log = (m) => logs.push(m);
+  const quiet = console.log;
+  const logs = [];
+  console.log = (m) => logs.push(m);
   try {
     assert.equal(run(['checkpoint', `${dir}/r1.json`, '--out', out, '--note', '처음 점검']), 0);
     assert.equal(run(['checkpoint', `${dir}/r2.json`, '--out', out, '--note', 'lodash 업그레이드']), 0);
@@ -182,7 +242,9 @@ test('지속 고도화: checkpoint 가 이전 상태에 이어 붙고, 고쳐진
     assert.ok(logs.join('\n').includes('lodash 업그레이드'));
     assert.equal(run(['status', out]), 0);
     assert.ok(readFileSync(`${out}/report.html`, 'utf8').includes('고도화 진행 기록'));
-  } finally { console.log = quiet; }
+  } finally {
+    console.log = quiet;
+  }
 });
 
 async function tmpProject(files) {
@@ -204,7 +266,10 @@ test('분류: 웹앱·데스크톱·API·CLI·Tauri·알 수 없음', async () =
   assert.ok(web.platforms.some((p) => p.includes('Cloudflare')));
   const el = classify(await tmpProject({ 'package.json': { dependencies: { electron: '1', react: '1', 'react-dom': '1' }, build: { win: {}, mac: {} } } }));
   assert.equal(el.types[0].type, 'desktop'); // 웹 프레임워크가 같이 있어도 electron 이 우선
-  assert.deepEqual(el.platforms.filter((p) => ['Windows', 'macOS'].includes(p)), ['Windows', 'macOS']);
+  assert.deepEqual(
+    el.platforms.filter((p) => ['Windows', 'macOS'].includes(p)),
+    ['Windows', 'macOS'],
+  );
   assert.equal(classify(await tmpProject({ 'package.json': { dependencies: { express: '1' } } })).types[0].type, 'api-server');
   assert.equal(classify(await tmpProject({ 'package.json': { bin: { x: 'a.js' } } })).types[0].type, 'cli');
   assert.equal(classify(await tmpProject({ 'src-tauri/tauri.conf.json': '{}' })).types[0].type, 'desktop');
@@ -215,7 +280,12 @@ test('프로파일: API 서버는 UI 영역이 해당 없음 → 판정 안 해�
   const { buildProfile } = await import('../src/profile.js');
   const p = buildProfile('api-server');
   const lists = loadChecklists();
-  const noUi = Object.fromEntries([...lists.values()].filter((a) => !p.notApplicable.includes(a.area)).flatMap((a) => a.ids).map((id) => [id, 'Clean']));
+  const noUi = Object.fromEntries(
+    [...lists.values()]
+      .filter((a) => !p.notApplicable.includes(a.area))
+      .flatMap((a) => a.ids)
+      .map((id) => [id, 'Clean']),
+  );
   const withProfile = score({ findings: [], coverage: noUi }, p);
   assert.equal(withProfile.completeness.complete, true);
   assert.equal(withProfile.groups.find((g) => g.name === 'UX/UI 완성도').na, true);
@@ -230,9 +300,17 @@ test('profile 명령: 저장 후 checkpoint 가 자동으로 따른다', async (
   const { run } = await import('../src/cli.js');
   const dir = mkdtempSync(`${tmpdir()}/pef-p-`);
   const out = `${dir}/.pef`;
-  const cov = Object.fromEntries([...loadChecklists().values()].filter((a) => !['4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.20'].includes(a.area)).flatMap((a) => a.ids).map((id) => [id, 'Clean']));
+  const cov = Object.fromEntries(
+    [...loadChecklists().values()]
+      .filter((a) => !['4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.20'].includes(a.area))
+      .flatMap((a) => a.ids)
+      .map((id) => [id, 'Clean']),
+  );
   writeFileSync(`${dir}/r.json`, JSON.stringify(result({ coverage: cov })));
-  const quiet = console.log; const qe = console.error; console.log = () => {}; console.error = () => {};
+  const quiet = console.log;
+  const qe = console.error;
+  console.log = () => {};
+  console.error = () => {};
   try {
     assert.equal(run(['profile', 'api-server', '--out', out, '--note', '사용자: 서버만']), 0);
     assert.equal(run(['checkpoint', `${dir}/r.json`, '--out', out, '--note', 'x']), 0);
@@ -240,7 +318,10 @@ test('profile 명령: 저장 후 checkpoint 가 자동으로 따른다', async (
     assert.equal(hist[0].complete, true);
     assert.ok(readFileSync(`${out}/report.html`, 'utf8').includes('앱 분류와 고도화 방향'));
     assert.equal(run(['profile', '없는유형', '--out', out]), 2);
-  } finally { console.log = quiet; console.error = qe; }
+  } finally {
+    console.log = quiet;
+    console.error = qe;
+  }
 });
 
 test('유형 전용 항목: DK-* 는 데스크톱에서만, MB-* 는 모바일에서만 점검 대상 (웹은 해당 없음으로 셈)', async () => {
@@ -268,8 +349,14 @@ test('영수증: .env 값은 절대 읽지 않고 이름만, 시크릿·토큰�
     '.env.local': 'SUPABASE_SERVICE_ROLE_KEY=sb_secret_REALVALUE_should_never_appear_123456\n',
     '.env.example': 'SUPABASE_SERVICE_ROLE_KEY=\nSTRIPE_SECRET_KEY=\n',
     'src/a.ts': 'const u = process.env.NEXT_PUBLIC_SUPABASE_URL; const k = process.env.STRIPE_SECRET_KEY; const x = process.env.ONLY_IN_CODE_TOKEN;',
-    'wrangler.jsonc': '{ // 주석\n "name": "demo-worker", "account_id": "0123456789abcdef0123456789abcdef", "routes": [{"pattern":"demo.example.com/*"}], "triggers": {"crons":["0 * * * *"]}, "vars": {"APP_ENV":"production-value-hidden"} }',
-    '.mcp.json': { mcpServers: { files: { command: 'npx', args: ['-y', '@x/mcp', '--token=SECRETTOKEN12345'], env: { MY_API_KEY: 'LEAKME_VALUE_999999' } }, remote: { url: 'https://mcp.example.com/sse?key=LEAKQUERY', headers: { Authorization: 'Bearer LEAKBEARER_abcdefghijk' } } } },
+    'wrangler.jsonc':
+      '{ // 주석\n "name": "demo-worker", "account_id": "0123456789abcdef0123456789abcdef", "routes": [{"pattern":"demo.example.com/*"}], "triggers": {"crons":["0 * * * *"]}, "vars": {"APP_ENV":"production-value-hidden"} }',
+    '.mcp.json': {
+      mcpServers: {
+        files: { command: 'npx', args: ['-y', '@x/mcp', '--token=SECRETTOKEN12345'], env: { MY_API_KEY: 'LEAKME_VALUE_999999' } },
+        remote: { url: 'https://mcp.example.com/sse?key=LEAKQUERY', headers: { Authorization: 'Bearer LEAKBEARER_abcdefghijk' } },
+      },
+    },
   });
   const r = buildReceipt(dir);
   const md = renderReceiptMd(r);
@@ -287,11 +374,16 @@ test('영수증: .env 값은 절대 읽지 않고 이름만, 시크릿·토큰�
 
 test('영수증: 실시간 확인 출력 파서 (wrangler whoami, supabase projects list)', async () => {
   const { parseWhoami, parseSupabaseProjects } = await import('../src/receipt.js');
-  const w = parseWhoami('👋 You are logged in with an OAuth Token, associated with the email someone@example.com.\n┌──┬──┐\n│ Account Name │ Account ID │\n│ My Account │ 0123456789abcdef0123456789abcdef │\n└──┴──┘');
+  const w = parseWhoami(
+    '👋 You are logged in with an OAuth Token, associated with the email someone@example.com.\n┌──┬──┐\n│ Account Name │ Account ID │\n│ My Account │ 0123456789abcdef0123456789abcdef │\n└──┴──┘',
+  );
   assert.equal(w.accounts[0].name, 'My Account');
   assert.ok(w.email.startsWith('som') && !w.email.includes('someone@'));
   const s = parseSupabaseProjects('  LINKED | ORG ID | REFERENCE ID | NAME | REGION | CREATED AT\n  ● | org123 | abcdefghijklmnopqrst | My Proj | Northeast Asia (Seoul) | 2026-06-28 00:00:00');
-  assert.deepEqual(s.map((p) => [p.ref, p.name]), [['abcdefghijklmnopqrst', 'My Proj']]);
+  assert.deepEqual(
+    s.map((p) => [p.ref, p.name]),
+    [['abcdefghijklmnopqrst', 'My Proj']],
+  );
 });
 
 test('PEF 기준 지문: 버전·항목 지문이 같으면 안내 없음, 다르면 안내', async () => {
@@ -324,7 +416,9 @@ test('디자인 값 세기: 색·글자·여백 집계, 토큰 정의는 제외,
   scanText(css.join('\n'), 'a.css', acc);
   assert.equal(acc.tokenDefs, 1); // --brand 는 토큰 정의라 직접 쓴 색에 안 센다
   assert.equal(acc.colors.size, 22);
-  const ids = designFindings(acc).map((f) => f.ruleId).sort();
+  const ids = designFindings(acc)
+    .map((f) => f.ruleId)
+    .sort();
   assert.deepEqual(ids, ['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06']);
   assert.ok(designFindings(acc).every((f) => f.verification === 'Suspected'));
   assert.equal(designFindings({ ...acc, colors: new Map(), fonts: new Map(), spaces: new Map(), radii: new Map(), icons: [] }).length, 0);
@@ -332,7 +426,9 @@ test('디자인 값 세기: 색·글자·여백 집계, 토큰 정의는 제외,
 
 test('gitleaks 파서: 규칙·위치·커밋만 담고 비밀 값은 담지 않는다', async () => {
   const { parseGitleaks } = await import('../src/adapters.js');
-  const f = parseGitleaks(JSON.stringify([{ RuleID: 'aws-access-token', File: 'a/.env.bak', StartLine: 3, Secret: 'AKIAREALLOOKINGSECRET', Match: 'KEY=AKIAREALLOOKINGSECRET', Commit: 'abcdef1234567' }]));
+  const f = parseGitleaks(
+    JSON.stringify([{ RuleID: 'aws-access-token', File: 'a/.env.bak', StartLine: 3, Secret: 'AKIAREALLOOKINGSECRET', Match: 'KEY=AKIAREALLOOKINGSECRET', Commit: 'abcdef1234567' }]),
+  );
   assert.equal(f[0].ruleId, 'SE-10');
   assert.equal(f[0].verification, 'Suspected');
   assert.ok(!JSON.stringify(f).includes('AKIAREAL'));
@@ -350,11 +446,35 @@ test('디자인 값 세기: 자바스크립트 스타일·Tailwind 값도 센다
 
 test('사이트 점검: 헤더·쿠키 분석, Lighthouse 파서 (값은 담지 않음)', async () => {
   const { analyzeHeaders, parseLighthouse } = await import('../src/web.js');
-  const f = analyzeHeaders('https://x.example/', { 'access-control-allow-origin': '*', 'access-control-allow-credentials': 'true' }, ['sid=SECRETVALUE123; Path=/', 'ok=1; HttpOnly; Secure; SameSite=Lax']);
+  const f = analyzeHeaders('https://x.example/', { 'access-control-allow-origin': '*', 'access-control-allow-credentials': 'true' }, [
+    'sid=SECRETVALUE123; Path=/',
+    'ok=1; HttpOnly; Secure; SameSite=Lax',
+  ]);
   assert.deepEqual(f.map((x) => x.ruleId).sort(), ['SE-04', 'SE-12', 'SE-17']);
   assert.ok(!JSON.stringify(f).includes('SECRETVALUE123'));
-  assert.equal(analyzeHeaders('http://localhost:3000/', { 'content-security-policy': "default-src 'self'; frame-ancestors 'none'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }).length, 0); // http 는 HSTS·Secure 요구 안 함
-  const lh = parseLighthouse(JSON.stringify({ lighthouseVersion: '13', requestedUrl: 'http://l/', categories: { accessibility: { auditRefs: [{ id: 'color-contrast', weight: 3 }, { id: 'image-alt', weight: 10 }] } }, audits: { 'color-contrast': { title: '대비', score: 0, scoreDisplayMode: 'binary', details: { items: [1, 2] } }, 'image-alt': { score: 1 }, 'largest-contentful-paint': { numericValue: 5200, displayValue: '5.2 s' } } }));
+  assert.equal(
+    analyzeHeaders('http://localhost:3000/', { 'content-security-policy': "default-src 'self'; frame-ancestors 'none'", 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' }).length,
+    0,
+  ); // http 는 HSTS·Secure 요구 안 함
+  const lh = parseLighthouse(
+    JSON.stringify({
+      lighthouseVersion: '13',
+      requestedUrl: 'http://l/',
+      categories: {
+        accessibility: {
+          auditRefs: [
+            { id: 'color-contrast', weight: 3 },
+            { id: 'image-alt', weight: 10 },
+          ],
+        },
+      },
+      audits: {
+        'color-contrast': { title: '대비', score: 0, scoreDisplayMode: 'binary', details: { items: [1, 2] } },
+        'image-alt': { score: 1 },
+        'largest-contentful-paint': { numericValue: 5200, displayValue: '5.2 s' },
+      },
+    }),
+  );
   assert.deepEqual(lh.map((x) => x.ruleId).sort(), ['A-04', 'P-09']);
 });
 

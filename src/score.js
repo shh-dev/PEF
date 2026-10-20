@@ -1,5 +1,5 @@
 // docs/SCORING.md 구현. 가중치·매핑·감점표는 그 문서와 같은 값이어야 한다.
-import { loadChecklists, appliesTo } from './checklist.js';
+import { appliesTo, loadChecklists } from './checklist.js';
 
 const SCORE_AREAS = [
   { name: '기능 완결성', weight: 20, areas: ['4.1'] },
@@ -28,7 +28,9 @@ const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
  */
 function completeness(merged, lists, na, type) {
   const unjudged = [...lists.values()]
-    .filter((a) => !na.has(a.area)).flatMap((a) => a.ids).filter((id) => appliesTo(id, type))
+    .filter((a) => !na.has(a.area))
+    .flatMap((a) => a.ids)
+    .filter((id) => appliesTo(id, type))
     .filter((id) => ['NotTested', 'RequiresManualReview', undefined].includes(merged.coverage[id]));
   const open = (f) => ['Confirmed', 'Suspected', 'RequiresManualReview'].includes(f.verification) && !(CLOSED.has(f.fixStatus) && (f.fixStatus !== 'AcceptedRisk' || f.acceptedBy));
   const untriaged = merged.findings.filter((f) => open(f) && (!f.disposition || f.disposition === 'NeedsCheck')).map((f) => f.id);
@@ -48,12 +50,10 @@ export function score(merged, profile = null) {
   // 세부 영역(4.x)
   const detail = new Map();
   for (const [area, { name, ids }] of lists) {
-    const verdicts = ids.map((id) => (na.has(area) || !appliesTo(id, profile?.type) ? 'NotApplicable' : merged.coverage[id] ?? 'NotTested'));
+    const verdicts = ids.map((id) => (na.has(area) || !appliesTo(id, profile?.type) ? 'NotApplicable' : (merged.coverage[id] ?? 'NotTested')));
     const applicable = verdicts.filter((v) => v !== 'NotApplicable').length;
     const tested = verdicts.filter((v) => TESTED.has(v)).length;
-    const deduction = merged.findings
-      .filter((f) => areaOf(f) === area && DEDUCT[f.verification] && !CLOSED.has(f.fixStatus))
-      .reduce((s, f) => s + DEDUCT[f.verification][f.severity], 0);
+    const deduction = merged.findings.filter((f) => areaOf(f) === area && DEDUCT[f.verification] && !CLOSED.has(f.fixStatus)).reduce((s, f) => s + DEDUCT[f.verification][f.severity], 0);
     detail.set(area, { area, name, applicable, tested, score: Math.max(0, 100 - deduction) });
   }
 
@@ -86,17 +86,14 @@ export function score(merged, profile = null) {
     coverage: pct(tested, applicable),
     confidence: confidence(coverage),
     // 검사를 거의 못 했는데 "차단 없음"만 보이면 안전하다는 착각을 준다 → 신뢰도 낮음이면 명시
-    verdict: confirmedP0.length
-      ? '출시 차단'
-      : suspectedP0.length
-        ? '출시 보류 – 수동 확인 필요'
-        : !complete.complete
-          ? '차단 근거 없음 (미완결 — 안전하다는 보장 아님)'
-          : '차단 없음',
+    verdict: confirmedP0.length ? '출시 차단' : suspectedP0.length ? '출시 보류 – 수동 확인 필요' : !complete.complete ? '차단 근거 없음 (미완결 — 안전하다는 보장 아님)' : '차단 없음',
     detail: [...detail.values()],
     groups: groups.map((g) => ({ ...g, coverage: pct(g.tested, g.applicable) })),
     weakAreas: [...detail.values()].filter((d) => d.tested > 0 && d.score < 50),
-    lowest: [...detail.values()].filter((d) => d.tested > 0).sort((a, b) => a.score - b.score).slice(0, 4),
+    lowest: [...detail.values()]
+      .filter((d) => d.tested > 0)
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 4),
     counts: { findings: merged.findings.length, ...bySeverity, tested, applicable },
     completeness: complete,
     ignoredFindings: original.findings.filter((f) => f.disposition === 'NoActionNow'),

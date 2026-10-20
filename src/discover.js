@@ -1,6 +1,7 @@
 // 대상 프로젝트 읽기 전용 탐색. .env* 는 파일 이름만 보고 내용은 열지 않는다 (PLAYBOOK §2-1).
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+
 import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const git = (dir, ...args) => {

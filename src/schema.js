@@ -30,7 +30,7 @@ function validate(value, schema, path = '$') {
       if (sub) errors.push(...validate(v, sub, `${path}.${k}`));
     }
   }
-  if (typeOf(value) === 'array' && schema.items) value.forEach((v, i) => errors.push(...validate(v, schema.items, `${path}[${i}]`)));
+  if (typeOf(value) === 'array' && schema.items) for (const [i, v] of value.entries()) errors.push(...validate(v, schema.items, `${path}[${i}]`));
   return errors;
 }
 
