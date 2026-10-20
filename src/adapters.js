@@ -4,6 +4,7 @@
 //  - 도구가 실패/타임아웃이면 "통과"가 아니라 NotTested.
 import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { scanDesign, designFindings } from './design.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mask } from './mask.js';
@@ -161,6 +162,8 @@ export const ADAPTERS = [
   { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
   { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '.'], parse: parseSemgrep, items: [] },
   { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
+  // 외부 도구 없이 이 프로세스에서 직접 센다 (run 이 있으면 설치 확인·셸 실행을 건너뜀). UI 소스가 없으면 해당 없음.
+  { id: 'pef-design', needs: (d) => !!scanDesign(d.target), run: (dir) => designFindings(scanDesign(dir)).map(finding), items: ['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06'] },
   { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },
 ];
 
@@ -174,6 +177,11 @@ export function runAdapters(dir, discovery) {
   for (const a of ADAPTERS) {
     if (!a.needs(discovery)) {
       notTested.push({ tool: a.id, reason: '이 스택에는 해당 없음' });
+      continue;
+    }
+    if (a.run) {
+      findings.push(...a.run(dir));
+      toolsUsed.push(a.id);
       continue;
     }
     const cmd = available(a.id);

@@ -313,3 +313,17 @@ test('작업 계획: 파트별 남은 일 계산, 다 끝나면 done', async () 
   const untested = buildPlan(result({ coverage: {} }));
   assert.ok(untested.parts.every((p) => p.unjudged > 0) && !untested.done);
 });
+
+test('디자인 값 세기: 색·글자·여백 집계, 토큰 정의는 제외, 임계 넘으면 Suspected', async () => {
+  const { scanText, designFindings } = await import('../src/design.js');
+  const acc = { colors: new Map(), fonts: new Map(), spaces: new Map(), radii: new Map(), varUses: 0, tokenDefs: 0, icons: ['lucide', 'react-icons'] };
+  const css = [':root { --brand: #112233; }', 'a { color: var(--brand); }'];
+  for (let i = 0; i < 22; i++) css.push(`.c${i} { color: #${String(100000 + i)}; font-size: ${10 + i}px; padding: ${3 + i}px; border-radius: ${i + 1}px; }`);
+  scanText(css.join('\n'), 'a.css', acc);
+  assert.equal(acc.tokenDefs, 1); // --brand 는 토큰 정의라 직접 쓴 색에 안 센다
+  assert.equal(acc.colors.size, 22);
+  const ids = designFindings(acc).map((f) => f.ruleId).sort();
+  assert.deepEqual(ids, ['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06']);
+  assert.ok(designFindings(acc).every((f) => f.verification === 'Suspected'));
+  assert.equal(designFindings({ ...acc, colors: new Map(), fonts: new Map(), spaces: new Map(), radii: new Map(), icons: [] }).length, 0);
+});
