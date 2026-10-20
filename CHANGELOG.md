@@ -41,4 +41,4 @@
 ## 미배포 변경
 - 디자인 값 세기(V-01~06), gitleaks 어댑터, Semgrep OWASP 규칙, `pef web`(Lighthouse·보안 헤더·쿠키)
 - 수정: checkpoint 중복 마감 시 기록 중복, 돌리지 않은 도구의 Finding 을 해결로 닫던 문제, 오류 메시지에 파일명, 기록 파일 안전 쓰기(임시 파일 후 교체)
-- 시작 전 준비 도구(ponytail·ELI5)·Jev 제안 규칙, GitHub Actions 테스트 워크플로
+- 시작 전 준비 도구(ponytail·ELI5)·Jev 제안 규칙, GitHub Actions 테스트 워크플로, Biome(린터·포매터, 개발용), Fixed 근거 필수·기록 형식 번호, MIT 라이선스
