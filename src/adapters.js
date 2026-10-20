@@ -129,6 +129,25 @@ export function parseOsv(json) {
   return out;
 }
 
+/** gitleaks detect --report-format json --redact (비밀 값은 --redact 로 가려져 나오며, 어차피 Finding 에는 규칙·위치·커밋만 넣는다) */
+export function parseGitleaks(json) {
+  return (JSON.parse(json || '[]') ?? []).map((l) =>
+    finding({
+      category: '4.13 보안',
+      ruleId: 'SE-10',
+      // 형식이 비밀처럼 생겼다는 것만 안다 — 실제 유효한 키인지는 모르므로 Suspected
+      verification: 'Suspected',
+      title: `비밀 값으로 보이는 문자열(${l.RuleID})${l.Commit ? ' — git 이력 포함' : ''}`,
+      severity: 'P1',
+      evidence: `gitleaks ${l.RuleID}${l.Commit ? ` 커밋 ${String(l.Commit).slice(0, 7)}` : ''}`,
+      filePath: l.File,
+      line: l.StartLine ?? null,
+      source: 'gitleaks',
+      recommendedFix: '유효한 키면 즉시 폐기·재발급하고, 이력에 남은 값은 재발급으로 무효화한다',
+    }),
+  );
+}
+
 /** depcruise --output-type json */
 export function parseDepcruise(json) {
   const out = [];
@@ -160,8 +179,9 @@ function depcruiseArgs() {
 
 export const ADAPTERS = [
   { id: 'knip', needs: (d) => d.stack.includes('node'), args: ['--reporter', 'json', '--no-progress'], parse: parseKnip, items: ['C-02'] },
-  { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '.'], parse: parseSemgrep, items: [] },
+  { id: 'semgrep', needs: () => true, args: ['--json', '--quiet', '--config', 'auto', '--config', 'p/owasp-top-ten', '.'], parse: parseSemgrep, items: [] },
   { id: 'osv-scanner', needs: () => true, args: ['--format', 'json', '-r', '.'], parse: parseOsv, items: ['SE-11'], emptyStatus: 128 },
+  { id: 'gitleaks', needs: () => true, args: ['detect', '--source', '.', '--report-format', 'json', '--report-path', '-', '--redact', '--no-banner', '--exit-code', '0'], parse: parseGitleaks, items: ['SE-10'] },
   // 외부 도구 없이 이 프로세스에서 직접 센다 (run 이 있으면 설치 확인·셸 실행을 건너뜀). UI 소스가 없으면 해당 없음.
   { id: 'pef-design', needs: (d) => !!scanDesign(d.target), run: (dir) => designFindings(scanDesign(dir)).map(finding), items: ['V-01', 'V-02', 'V-03', 'V-04', 'V-05', 'V-06'] },
   { id: 'depcruise', needs: (d) => d.stack.includes('node'), args: depcruiseArgs, parse: parseDepcruise, items: ['AR-02'] },

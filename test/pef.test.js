@@ -327,3 +327,21 @@ test('디자인 값 세기: 색·글자·여백 집계, 토큰 정의는 제외,
   assert.ok(designFindings(acc).every((f) => f.verification === 'Suspected'));
   assert.equal(designFindings({ ...acc, colors: new Map(), fonts: new Map(), spaces: new Map(), radii: new Map(), icons: [] }).length, 0);
 });
+
+test('gitleaks 파서: 규칙·위치·커밋만 담고 비밀 값은 담지 않는다', async () => {
+  const { parseGitleaks } = await import('../src/adapters.js');
+  const f = parseGitleaks(JSON.stringify([{ RuleID: 'aws-access-token', File: 'a/.env.bak', StartLine: 3, Secret: 'AKIAREALLOOKINGSECRET', Match: 'KEY=AKIAREALLOOKINGSECRET', Commit: 'abcdef1234567' }]));
+  assert.equal(f[0].ruleId, 'SE-10');
+  assert.equal(f[0].verification, 'Suspected');
+  assert.ok(!JSON.stringify(f).includes('AKIAREAL'));
+  assert.deepEqual(parseGitleaks(''), []);
+});
+
+test('디자인 값 세기: 자바스크립트 스타일·Tailwind 값도 센다', async () => {
+  const { scanText } = await import('../src/design.js');
+  const acc = { colors: new Map(), fonts: new Map(), spaces: new Map(), radii: new Map(), varUses: 0, tokenDefs: 0 };
+  scanText(`<div style={{ fontSize: 14, padding: '10px', borderRadius: 6 }} className="text-[13px] p-[7px] rounded-[9px] text-lg rounded-xl p-4" />`, 'a.tsx', acc);
+  assert.deepEqual([...acc.fonts.keys()].sort(), ['13px', '14px', 'tw-lg']);
+  assert.deepEqual([...acc.spaces.keys()].sort(), ['10px', '7px']); // p-4 는 격자라 세지 않음
+  assert.deepEqual([...acc.radii.keys()].sort(), ['6px', '9px', 'tw-xl']);
+});

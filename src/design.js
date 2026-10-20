@@ -38,7 +38,14 @@ export function scanText(text, file, acc) {
     }
     for (const m of line.matchAll(/#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b|rgba?\([^)]*\)|hsla?\([^)]*\)/g)) tally(acc.colors, m[0].toLowerCase().replace(/\s+/g, ''), file);
     for (const m of line.matchAll(/font-size\s*:\s*(\d*\.?\d+)(px|rem|em)/g)) tally(acc.fonts, `${px(m[1], m[2])}px`, file);
-    for (const m of line.matchAll(/text-\[(\d+)px\]/g)) tally(acc.fonts, `${m[1]}px`, file);
+    // 자바스크립트 스타일 객체: fontSize: 14 / padding: '12px' / borderRadius: 8
+    for (const m of line.matchAll(/\bfontSize\s*:\s*['"]?(\d*\.?\d+)(px|rem)?/g)) tally(acc.fonts, `${px(m[1], m[2] ?? 'px')}px`, file);
+    for (const m of line.matchAll(/\b(?:margin|padding|gap)(?:Top|Bottom|Left|Right|Inline|Block)?\s*:\s*['"]?(\d*\.?\d+)(px|rem)?/g)) tally(acc.spaces, `${px(m[1], m[2] ?? 'px')}px`, file);
+    for (const m of line.matchAll(/\bborderRadius\s*:\s*['"]?(\d*\.?\d+)(px|rem)?/g)) tally(acc.radii, `${px(m[1], m[2] ?? 'px')}px`, file);
+    // Tailwind: 임의값 text-[13px] p-[7px] rounded-[9px], 글자 크기·둥글기 눈금(text-lg, rounded-xl). 여백 눈금(p-4)은 4px 격자 자체라 세지 않는다.
+    for (const m of line.matchAll(/\b(text|p[xytblr]?|m[xytblr]?|gap|rounded)-\[(\d*\.?\d+)(px|rem)\]/g)) tally(m[1] === 'text' ? acc.fonts : m[1] === 'rounded' ? acc.radii : acc.spaces, `${px(m[2], m[3])}px`, file);
+    for (const m of line.matchAll(/\btext-(xs|sm|base|lg|xl|[2-9]xl)\b/g)) tally(acc.fonts, `tw-${m[1]}`, file);
+    for (const m of line.matchAll(/\brounded(?:-[a-z]+)?-(none|sm|md|lg|xl|2xl|3xl|full)\b|\brounded\b(?![-\w])/g)) tally(acc.radii, `tw-${m[1] ?? 'base'}`, file);
     for (const d of line.matchAll(/(?:margin|padding|gap)(?:-[a-z]+)?\s*:\s*([^;}]+)/g)) for (const m of d[1].matchAll(/(\d*\.?\d+)(px|rem)\b/g)) tally(acc.spaces, `${px(m[1], m[2])}px`, file);
     for (const d of line.matchAll(/border-radius\s*:\s*([^;}]+)/g)) for (const m of d[1].matchAll(/(\d*\.?\d+)(px|rem)\b/g)) tally(acc.radii, `${px(m[1], m[2])}px`, file);
   }
