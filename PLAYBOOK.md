@@ -36,7 +36,7 @@
 
 ## 0.8 시작 전 준비 도구와 Jev 제안 (필수)
 
-1. **시작 전에 이 두 개를 깔려 있게 한다 (사용자 지시, 이 두 개만 승인 없이 설치):** `https://github.com/DietrichGebert/ponytail` (최소 변경 원칙), `https://github.com/DreambigOu/ELI5` (쉬운 설명 보고). 이미 깔려 있는지 먼저 본다 — `~/.claude/plugins/installed_plugins.json` 에 있으면 그대로 진행. 없을 때만 그 저장소의 README 설치 방법을 읽고 설치한다. 설치하지 못하면 사유를 한 줄 알리고 고도화는 계속한다 (이 도구들은 편의이지 점검 전제가 아니다). **다른 저장소·플러그인은 사용자 승인 없이 설치하지 않는다.**
+1. **고도화에 쓰는 스킬 10개 (사용자 지정 목록: `docs/SKILLS.md`).** 필수 2개 — `https://github.com/DietrichGebert/ponytail`(최소 변경), `https://github.com/DreambigOu/ELI5`(쉬운 설명 보고) — 는 시작 전에 깔려 있게 한다(사용자 지시, 승인 없이 설치). 이미 깔려 있는지 먼저 본다: `~/.claude/plugins/installed_plugins.json` 에 있으면 그대로 진행, 없을 때만 그 저장소 README 의 설치 방법을 읽고 설치한다. 설치하지 못하면 사유를 한 줄 알리고 계속한다. 나머지 8개(Superpowers, Matt Pocock Skills, Karpathy Skills, UI UX Pro Max, Graphify, Caveman, Addy Osmani Skills, Taste Skill)는 깔려 있으면 쓰고, 없으면 그 스킬이 필요한 순간에 **사용자에게 설치 승인**을 받는다. Caveman 은 사용자 보고에 쓰지 않고(보고는 항상 ELI5), UI 스킬의 결과는 근거가 아니라 제안(`Suspected`)으로만 적는다. 이 목록 밖의 저장소·플러그인은 사용자 승인 없이 설치하지 않는다.
 2. **Jev(TypeSafe)는 개발 환경에 맞을 때 사용자에게 *요청*한다.** 같은 종류의 작은 판단이 30건 이상 쌓였을 때(예: 같은 규칙의 경고 수십 건이 가짜 경보인지 선별, 안 쓰는 코드 후보 분류)만 "Jev를 쓰면 빨라질 수 있다"고 제안한다. 제안에는 쓸 곳, 건수, 코드 조각이 외부 서비스로 나간다는 점, API 키·비용 필요를 적고 **승인 후에만** 쓴다.
 3. 승인되면 사람이 확인한 샘플 10건 안팎으로 정확도를 먼저 재고, 쓸 만할 때만 전체에 쓴다. Jev의 답은 `Suspected`로만 기록하고 근거 없는 `NoActionNow` 처분의 근거로 쓰지 않는다. 개발 환경이 맞지 않으면(판단 건수가 적거나 키가 없음) 제안하지 않는다.
 
