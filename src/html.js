@@ -18,6 +18,8 @@ function item(f) {
   ${f.recommendedFix ? `<p><em>어떻게 고치나?</em> ${esc(f.recommendedFix)}</p>` : ''}
   ${f.dispositionReason ? `<p><em>처분 이유</em> ${esc(f.dispositionReason)}</p>` : ''}
   ${f.dispositionEvidence ? `<p><em>확인한 근거</em> ${esc(f.dispositionEvidence)}</p>` : ''}
+  ${f.fixStatus ? `<p><em>처리 상태</em> ${esc(f.fixStatus)}</p>` : ''}
+  ${f.fixEvidence ? `<p><em>수정 확인 근거</em> ${esc(f.fixEvidence)}</p>` : ''}
   ${f.recheckWhen ? `<p><em>다시 볼 조건</em> ${esc(f.recheckWhen)}</p>` : ''}
   <p class="meta">${esc(f.id)} · ${esc(f.ruleId)}${loc ? ` · ${esc(loc)}` : ''}${f.evidence ? ` · 증거: ${esc(f.evidence)}` : ''}</p>
 </li>`;
@@ -38,11 +40,14 @@ function group(title, hint, findings, open = false) {
 export function renderHtml(merged, s, now = new Date(), history = [], profile = null) {
   const m = merged.meta;
   const all = merged.findings;
-  const dispo = (d) => all.filter((f) => f.disposition === d && !['FalsePositive', 'NotApplicable'].includes(f.verification));
+  const resolved = (f) => ['Fixed', 'Verified'].includes(f.fixStatus);
+  const completed = all.filter((f) => resolved(f) && !['FalsePositive', 'NotApplicable'].includes(f.verification));
+  const active = all.filter((f) => !resolved(f));
+  const dispo = (d) => active.filter((f) => f.disposition === d && !['FalsePositive', 'NotApplicable'].includes(f.verification));
   const act = dispo('ActNow');
   const plan = dispo('Plan');
-  const noAction = s.ignoredFindings;
-  const pending = all.filter((f) => (!f.disposition || f.disposition === 'NeedsCheck') && !['FalsePositive', 'NotApplicable'].includes(f.verification));
+  const noAction = s.ignoredFindings.filter((f) => !completed.includes(f));
+  const pending = active.filter((f) => (!f.disposition || f.disposition === 'NeedsCheck') && !['FalsePositive', 'NotApplicable'].includes(f.verification));
   const tone = verdictTone(s.verdict);
   const scoreText = s.total === null ? '점수 산출 불가' : `${s.total}점`;
   const manual = s.manualReview;
@@ -92,6 +97,7 @@ ${profile ? `<div class="card"><b>앱 분류와 고도화 방향</b><p><b>${esc(
     <div class="kpi"><b>${plan.length}</b><span>계획에 넣기</span></div>
     <div class="kpi"><b>${noAction.length}</b><span>당장 신경 안 써도 됨</span></div>
     <div class="kpi"><b>${pending.length}</b><span>판단 전</span></div>
+    <div class="kpi"><b>${completed.length}</b><span>수정 완료</span></div>
     <div class="kpi"><b>${s.completeness.unjudged.length}</b><span>아직 못 본 항목</span></div>
   </div>
 </div>
@@ -100,6 +106,7 @@ ${group('지금 고쳐야 하는 것', '서비스나 사용자에게 실제 피�
 ${group('계획에 넣을 것', '급하진 않지만 고치기로 한 것들입니다.', plan)}
 ${group('당장 신경 쓰지 않아도 되는 것', '영향이 없다는 것을 실제로 확인한 것만 여기 들어옵니다. "다시 볼 조건"이 되면 다시 확인하세요.', noAction)}
 ${group('아직 판단 전인 것', '도구나 점검이 찾았지만 아직 지금/계획/무시 중 어느 쪽인지 정하지 않은 것입니다.', pending)}
+${group('수정 완료 및 검증 결과', '수정·재검사 근거를 보존한 기록입니다. 미해결 작업 수에는 포함하지 않습니다.', completed)}
 
 ${manual.length ? `<section class="card"><b>사람이 직접 확인할 것</b><p class="hint">코드만으로는 확정할 수 없고 실제 서버·DB·설정을 봐야 하는 것입니다.</p><p>${manual.map(esc).join(', ')}</p></section>` : ''}
 
