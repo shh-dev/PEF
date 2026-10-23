@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import { renderHtml } from '../src/html.js';
 import { score } from '../src/score.js';
 
+test('고도화 기록은 기본 접힘 상태이며 펼치면 기존 기록을 읽을 수 있다', () => {
+  const merged = { meta: { target: 'fixture', commit: 'abc', auditedAt: 'now' }, findings: [], coverage: {} };
+  const html = renderHtml(merged, score(merged), new Date(), [{ at: '2026-10-23', total: null, note: '로그인 오류 수정 및 회귀 검사' }]);
+  const section = html.match(/<section class="card"><details([^>]*)><summary class="sec">고도화 진행 기록<\/summary>([\s\S]*?)<\/details><\/section>/);
+  assert.ok(section, '진행 기록에 접기 컨트롤이 있어야 한다');
+  assert.doesNotMatch(section[1], /\bopen\b/);
+  assert.ok(section[2].includes('로그인 오류 수정 및 회귀 검사'));
+});
+
 test('완료 항목은 미해결 집계에서 제외하고 확인 근거와 함께 보존한다', () => {
   const findings = [
     { id: 'active', disposition: 'ActNow', fixStatus: 'Open' },

@@ -112,7 +112,7 @@ ${manual.length ? `<section class="card"><b>사람이 직접 확인할 것</b><p
 
 ${
   history.length
-    ? `<section class="card"><b>고도화 진행 기록</b><p class="hint">점검할 때마다 쌓이는 기록입니다. 무슨 작업을 해서 점수가 어떻게 바뀌었는지 보여 줍니다.</p><table><tr><th>시각</th><th>점수</th><th>한 일</th></tr>${[
+    ? `<section class="card"><details><summary class="sec">고도화 진행 기록</summary><p class="hint">점검 이력은 펼쳐서 볼 수 있습니다. 상세 작업 내용과 검증 결과는 각 한글 커밋 본문에도 남깁니다.</p><table><tr><th>시각</th><th>점수</th><th>한 일</th></tr>${[
         ...history,
       ]
         .reverse()
@@ -120,7 +120,7 @@ ${
           (e, i, a) =>
             `<tr><td>${esc(e.at)}</td><td>${e.total === null ? '-' : e.total}${a[i + 1] && a[i + 1].total !== null && e.total !== null ? ` <span class="dim">(${e.total - a[i + 1].total >= 0 ? '+' : ''}${e.total - a[i + 1].total})</span>` : ''}</td><td>${esc(e.note || '')}</td></tr>`,
         )
-        .join('')}</table></section>`
+        .join('')}</table></details></section>`
     : ''
 }
 
