@@ -24,10 +24,18 @@ const BAD = `${HEAD}</head><body style="margin:0;overflow:hidden;height:100vh;fo
 <script>document.getElementById('o').onclick=()=>{document.getElementById('m').style.display='block'}</script>
 </body></html>`;
 
+// 변경 전후 비교 시험용: /__mode/1 로 호출하면 /good 의 제목 색과 여백이 바뀐다
+let mode = 0;
+
 export function startServer(port = 0) {
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(req.url.startsWith('/bad') ? BAD : GOOD);
+    if (req.url.startsWith('/__mode/')) {
+      mode = Number(req.url.slice(8)) || 0;
+      return res.end('ok');
+    }
+    const good = mode ? GOOD.replace('<h1>', '<h1 style="color:#d00;margin:60px 20px">') : GOOD;
+    res.end(req.url.startsWith('/bad') ? BAD : good);
   });
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }

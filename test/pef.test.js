@@ -649,3 +649,52 @@ test('휴대폰 손가락 점검: 일부러 깨뜨린 화면은 잡고 멀쩡한
     server.close();
   }
 });
+
+test('디자인 값 재고: 값 개수·가까운 표준값·토큰 비율을 낸다', async () => {
+  const { designInventory, renderInventoryMd } = await import('../src/designreport.js');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const d = mkdtempSync(`${tmpdir()}/pef-inv-`);
+  writeFileSync(`${d}/a.css`, ':root { --brand: #112233; }\n.a { color: #ff0000; font-size: 21px; padding: 10px; border-radius: 5px; }\n.b { color: var(--brand); font-size: 21px; padding: 10px; }');
+  const inv = designInventory(d);
+  assert.equal(inv.colors.unique, 1);
+  assert.equal(inv.fonts.top[0].value, '21px');
+  assert.equal(inv.fonts.top[0].count, 2);
+  assert.equal(inv.fonts.top[0].suggest, '20px'); // 가장 가까운 눈금
+  assert.equal(inv.fonts.top[0].onScale, false);
+  assert.equal(inv.spaces.top[0].suggest, '8px'); // 10 → 8 또는 12 중 가까운 쪽 (8 이 먼저)
+  assert.equal(inv.tokens.varUses, 1);
+  assert.ok(renderInventoryMd(inv).includes('가까운 표준값'));
+  assert.equal(designInventory(mkdtempSync(`${tmpdir()}/pef-inv-empty-`)), null); // UI 소스 없으면 null
+});
+
+test('변경 전후 캡처 비교: 같은 화면은 같음, 바뀐 화면은 바뀜 (Chrome·playwright-core 있을 때만)', async (t) => {
+  const { captureShots, diffShots } = await import('../src/shots.js');
+  const { startServer } = await import('./fixtures/touch-server.mjs');
+  const { mkdtempSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const server = await startServer(0);
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const out = mkdtempSync(`${tmpdir()}/pef-shots-`);
+    const vp = [{ name: 'mobile', width: 390, height: 844, mobile: true }];
+    try {
+      await captureShots(`${base}/good`, { routes: ['/good'], label: 'before', outDir: out, viewports: vp });
+    } catch (e) {
+      if (/playwright-core|Executable|chrome/i.test(e.message)) return t.skip('Chrome/playwright-core 없음');
+      throw e;
+    }
+    await captureShots(`${base}/good`, { routes: ['/good'], label: 'same', outDir: out, viewports: vp });
+    const same = await diffShots(`${out}/before`, `${out}/same`, { outDir: `${out}/d1` });
+    assert.equal(same.counts.same, 1);
+    await fetch(`${base}/__mode/1`); // /good 의 제목 색·여백이 바뀜
+    await captureShots(`${base}/good`, { routes: ['/good'], label: 'after', outDir: out, viewports: vp });
+    const changed = await diffShots(`${out}/before`, `${out}/after`, { outDir: `${out}/d2` });
+    assert.equal(changed.counts.same, undefined);
+    assert.ok(changed.rows[0].percent > 0);
+    assert.ok(existsSync(`${out}/d2/good__mobile__diff.png`));
+    await assert.rejects(() => captureShots(`${base}/good`, { routes: ['/good'], label: 'bad label!', outDir: out }), /label/);
+  } finally {
+    server.close();
+  }
+});

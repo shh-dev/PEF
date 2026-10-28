@@ -43,3 +43,4 @@
 - 수정: checkpoint 중복 마감 시 기록 중복, 돌리지 않은 도구의 Finding 을 해결로 닫던 문제, 오류 메시지에 파일명, 기록 파일 안전 쓰기(임시 파일 후 교체)
 - 시작 전 준비 도구(ponytail·ELI5)·Jev 제안 규칙, GitHub Actions 테스트 워크플로, Biome(린터·포매터, 개발용), Fixed 근거 필수·기록 형식 번호, MIT 라이선스
 - 휴대폰 손가락 점검(`pef touch`): 아이폰·갤럭시 크기로 화면·팝업을 열어 끝까지 스크롤·버튼 잘림·키보드 가림 확인 (체크리스트 TC-01~03)
+- 디자인시스템 정리 5단계(`docs/DESIGN-SYSTEM.md`)와 도구: `pef design`(값 재고), `pef shots`·`pef shots-diff`(변경 전후 캡처·픽셀 비교)

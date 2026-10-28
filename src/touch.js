@@ -278,7 +278,7 @@ export function judgeDialog(d, dev, opener) {
 
 // ── 실행 ──────────────────────────────────────────────────────────────────────
 
-function loadChromium() {
+export function loadChromium() {
   const tryReq = (base) => {
     try {
       return createRequire(join(base, 'x.js'))('playwright-core').chromium;
@@ -323,7 +323,7 @@ async function swipeToEnd(page, cdp, dev) {
 }
 
 /** 같은 사이트 안의 화면 주소 모으기 (너비 우선, 최대 max 개) */
-async function discoverRoutes(page, base, max) {
+export async function discoverRoutes(page, base, max) {
   const origin = new URL(base).origin;
   const seen = new Set([new URL(base).pathname || '/']);
   const queue = [...seen];

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { resolve } from 'node:path';
 import { ADAPTERS, runAdapters } from './adapters.js';
 import { classify, TYPE_LABEL } from './classify.js';
+import { designInventory, renderInventoryMd } from './designreport.js';
 import { discover } from './discover.js';
 import { renderHtml } from './html.js';
 import { mask } from './mask.js';
@@ -12,6 +13,7 @@ import { buildReceipt, renderReceiptHtml, renderReceiptMd } from './receipt.js';
 import { renderReport } from './report.js';
 import { validateResult } from './schema.js';
 import { score } from './score.js';
+import { captureShots, diffShots, renderDiffMd } from './shots.js';
 import { kst, kstStamp } from './time.js';
 import { auditTouch } from './touch.js';
 import { changedNote, checkFormat, FORMAT, stamp, update } from './version.js';
@@ -23,6 +25,12 @@ const HELP = `pef — Product Excellence Framework CLI (읽기 전용 도구, �
   pef web <주소> [--out 폴더]                실행 중인 사이트 점검: Lighthouse(접근성·성능) + 보안 헤더·쿠키 속성. 사용자가 준 주소에만 요청
   pef touch <주소> [--routes /a,/b] [--max 12] [--out 폴더]
                                              휴대폰 손가락 점검: 아이폰·갤럭시 크기로 화면·팝업을 열어 끝까지 스크롤·버튼 잘림·키보드 가림 확인 (Chrome 에뮬레이션, playwright-core 필요)
+  pef design [앱 폴더] [--out 폴더] [--json]
+                                             디자인 값 재고: 직접 쓴 색·글자 크기·여백·모서리 값과 가까운 표준값 제안 (디자인시스템 정리 1·2단계)
+  pef shots <주소> --label before|after-N [--routes /a,/b] [--max 12] [--out .pef/shots]
+                                             화면 캡처(데스크톱·모바일). 변경 전후 비교용 (디자인시스템 정리 5단계, playwright-core 필요)
+  pef shots-diff <전 라벨> <후 라벨> [--out .pef/shots]
+                                             변경 전후 캡처를 픽셀 비교, 바뀐 화면은 빨간 표시 이미지로 저장
   pef plan [.pef 폴더]                       파트별 해야 할 일 계획표 (처음 부르면 1차 작성 시각 기록, 이후엔 남은 일을 다시 계산)
   pef update                               PEF 자신을 원격 최신으로 갱신 (fast-forward만). 이어 쓰던 프로젝트는 갱신 뒤 pef checkpoint 한 번으로 새 기준 적용
   pef discover [폴더]                      스택·git 상태 탐색 (JSON)
@@ -141,6 +149,51 @@ const reportOrBaseline = ({ cmd, args, flags, profileOf, load }) => {
 
 // 명령별 처리 함수. 각 함수는 종료 코드(또는 그것을 돌려주는 Promise)를 반환한다.
 const COMMANDS = {
+  design: ({ args, flags }) => {
+    // 디자인 값 재고: 직접 쓴 색·글자 크기·여백·모서리 값을 세고 가까운 표준값을 제안한다 (디자인시스템 정리 1·2단계). 대상은 읽기만 한다.
+    const dir = resolve(args[0] ?? '.');
+    const inv = designInventory(dir);
+    if (!inv) return fail(`${dir} 에서 UI 소스(css·tsx·vue 등)를 찾지 못했습니다`);
+    if (flags.out) {
+      mkdirSync(resolve(flags.out), { recursive: true });
+      writeFileSync(`${resolve(flags.out)}/design-inventory.json`, JSON.stringify(inv, null, 2));
+      writeFileSync(`${resolve(flags.out)}/design-inventory.md`, renderInventoryMd(inv));
+      console.log(`저장: ${resolve(flags.out)}/design-inventory.md (+ .json)`);
+    }
+    console.log(flags.json ? JSON.stringify(inv, null, 2) : renderInventoryMd(inv));
+    return 0;
+  },
+
+  shots: ({ args, flags }) => {
+    // 화면 캡처(변경 전 before / 후 after): 데스크톱·모바일 크기, 같은 사이트 안의 화면 (디자인시스템 정리 5단계)
+    if (!args[0]) return fail('사용법: pef shots <http(s)://주소> --label before [--routes /a,/b] [--max 12] [--out .pef/shots]');
+    const out = resolve(flags.out ?? '.pef/shots');
+    return captureShots(args[0], { routes: flags.routes?.split(',').filter(Boolean), label: flags.label, outDir: out, max: Number(flags.max) || 12 }).then(
+      (r) => {
+        console.log(`저장: ${r.dir} — 캡처 ${r.files.length}장${r.notes.length ? ` · 열지 못한 화면 ${r.notes.length}곳: ${r.notes.slice(0, 2).join(' | ')}` : ''}`);
+        return 0;
+      },
+      (e) => fail(e.message),
+    );
+  },
+
+  'shots-diff': ({ args, flags }) => {
+    // 변경 전후 캡처 비교: 바뀐 화면은 빨간 표시 이미지로 저장
+    if (args.length < 2) return fail('사용법: pef shots-diff <전 라벨> <후 라벨> [--out .pef/shots]  (예: pef shots-diff before after-1)');
+    const base = resolve(flags.out ?? '.pef/shots');
+    const outDir = `${base}/diff_${args[0]}_${args[1]}`;
+    return diffShots(`${base}/${args[0]}`, `${base}/${args[1]}`, { outDir }).then(
+      (summary) => {
+        const md = renderDiffMd(summary);
+        writeFileSync(`${outDir}/summary.md`, md);
+        console.log(md);
+        console.log(`저장: ${outDir} (summary.md, 바뀐 화면의 __diff.png)`);
+        return 0;
+      },
+      (e) => fail(e.message),
+    );
+  },
+
   touch: ({ args, flags }) => {
     // 휴대폰 손가락 점검: 아이폰·갤럭시 크기로 화면과 팝업을 열어 스크롤·잘림·키보드를 확인한다 (사용자가 준 주소의 같은 사이트 안에서만 이동)
     if (!args[0]) return fail('사용법: pef touch <http(s)://주소> [--routes /a,/b] [--max 12] [--out 폴더]');
@@ -376,7 +429,7 @@ export function run(argv) {
     else if (rest[i] === '--live') flags.live = true;
     else if (rest[i] === '--note') flags.note = rest[++i];
     else if (rest[i] === '--profile') flags.profile = rest[++i];
-    else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck', '--routes', '--max'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
+    else if (['--rule', '--severity', '--source', '--disposition', '--reason', '--evidence', '--recheck', '--routes', '--max', '--label'].includes(rest[i])) flags[rest[i].slice(2)] = rest[++i];
     else args.push(rest[i]);
   }
   // 확정된 앱 프로파일(.pef/profile.json 또는 --profile 파일). 없으면 기본 가중치.
