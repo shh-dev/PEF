@@ -11,7 +11,30 @@
 | **필요할 때** | 3~10 | 이미 깔려 있으면 그대로 쓴다. 없으면 **그 스킬이 필요한 순간에 사용자에게 설치 승인**을 받는다. |
 
 - 스킬은 에이전트의 행동을 바꾸는 지시문이고 스크립트·훅을 포함할 수 있다. 설치 전에 README 와 훅·실행 파일 유무를 확인한다.
-- 10개 모두 GitHub 에서 라이선스 표기가 조회되지 않았다(`licenseInfo` 없음). 설치는 사용자 개인 환경에서의 사용이고, 대상 프로젝트 저장소에 파일을 복사해 넣지 않는다.
+- 라이선스(2026-10-28, `gh api repos/<저장소>/license` 로 확인): ELI5·Ponytail·Superpowers·Matt Pocock·UI UX Pro Max·Addy Osmani·Taste = MIT, Graphify·Caveman = Apache-2.0, **Karpathy Skills = LICENSE 파일 없음**. (`gh repo view --json licenseInfo` 는 값이 비어 나와 믿을 수 없었다.) 설치는 사용자 개인 환경에서의 사용이고, 대상 프로젝트 저장소에 파일을 복사해 넣지 않는다.
+
+## 디자인 보강 후보 (선택, 2026-10-28 조사 — 프론트엔드 디자인 개선용)
+
+"디자인시스템 정리하자"(`docs/DESIGN-SYSTEM.md`)의 단계별로 보강할 수 있는 후보다. 모두 **사용자 승인 후에만** 설치·도입한다. 아래 상태는 조사 시점 값이다.
+
+| 후보 | 종류 | 라이선스 | 쓰이는 단계 | 상태 |
+|---|---|---|---|---|
+| ECC `design-system` · `frontend-design` · `frontend-patterns` · `e2e-testing` (이미 설치된 ecc 플러그인 안) | 스킬 | MIT 계열(ecc 저장소 확인 필요) | 1 감사·2 토큰(디자인시스템 생성·점검, 스타일 PR 리뷰), 3 컴포넌트, 5 E2E | 이 PC 설치됨 — 바로 사용 가능 |
+| [Impeccable](https://github.com/pbakaus/impeccable) | 스킬(명령 24개) + 결정적 검출 규칙 62개(CLI·브라우저 확장, LLM·키 불필요) | Apache-2.0 | 1 감사(audit·critique), 3~4 다듬기(polish·bolder·quieter) | 미설치. 설치는 `npx impeccable install`(npm 패키지 실행)이라 설치 전 승인·내용 확인 |
+| [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) | 유명 브랜드 디자인 시스템 분석 `DESIGN.md` 모음 | MIT | 2 토큰(참고 자료) | 참고용. 복제 금지 원칙(`docs/UI-REFERENCES.md`)대로 원칙만 추출 |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) · https://ui.shadcn.com | React 컴포넌트 코드 모음(Radix + Tailwind, CLI 로 소스를 복사해 넣음) | MIT | 3 컴포넌트(Button·Input·Card·Dialog·Table 등의 기반), 2 토큰(CSS 변수) | 조건부: React+Tailwind 앱이고 공통 컴포넌트가 없을 때. 아래 "shadcn/ui 도입 조건" 참고 |
+| [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) | Vercel 공식 에이전트 스킬 모음 | **LICENSE 파일 없음** | 1·4(웹 디자인 가이드, React 성능 — 내용은 직접 읽어 확인하지 못함) | 보류(내용·라이선스 확인 후) |
+| [playwright-skill](https://github.com/lackeyjb/playwright-skill) | Playwright 범용 자동화 스킬 | 미확인 | 5 검증 | `pef shots`·`pef touch` 와 겹침 — 필요할 때만 |
+| [open-design](https://github.com/nexu-io/open-design)·[onlook](https://github.com/onlook-dev/onlook) | 디자인 작업공간/비주얼 에디터 앱 | 미확인 | — | 보류(스킬이 아니라 별도 앱) |
+
+### shadcn/ui 도입 조건
+
+- 대상 앱이 **React 계열(Next.js·Vite 등) + Tailwind** 일 때만 쓴다. Vue·Svelte·순수 HTML·데스크톱 앱에는 맞지 않는다(그럴 땐 구조·상태 규칙만 참고).
+- 라이브러리를 설치하는 방식이 아니라 `npx shadcn@latest add button` 처럼 **컴포넌트 소스를 프로젝트에 복사**한다. 복사된 코드는 앱 소유가 되어 마음대로 고칠 수 있지만, 업데이트가 자동으로 오지 않는다. (명령은 npm 패키지를 실행하므로 도입 전 사용자 승인.)
+- 같이 들어오는 것: Radix UI(접근성 부품), `class-variance-authority`, `clsx`, `tailwind-merge`, 아이콘(보통 lucide) 등 의존성 몇 개. PEF 3단계의 "아이콘 세트 하나로" 원칙과 맞추려면 기존 아이콘 라이브러리와 충돌하지 않게 확인한다.
+- 색·모서리·글꼴은 **CSS 변수 토큰**으로 정의되어 2단계(토큰 고정)와 맞물린다. 이미 앱에 토큰이 있으면 shadcn 변수를 앱 토큰에 연결하고, 없으면 2단계에서 정한 토큰으로 shadcn 변수를 채운다.
+- **화면이 바뀐다.** 기존 버튼·입력칸을 교체하면 모양이 달라지므로 5단계 전후 비교(`pef shots-diff`)로 의도한 변화인지 확인한다. 한 부품씩 교체한다.
+- 이미 자체 공통 컴포넌트가 잘 정리돼 있으면 도입하지 않고 참고 자료(접근성 처리, 상태·변형 구성)로만 쓴다.
 - 설치 여부 확인: `~/.claude/plugins/installed_plugins.json` 의 키 목록.
 
 ## 목록
